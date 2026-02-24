@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: siap_bpk_db
+    environment:
+      POSTGRES_USER: siap_admin
+      POSTGRES_PASSWORD: siap_password
+      POSTGRES_DB: siap_bpk
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: "1G"
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: siap_bpk_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+
+  # Go Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: siap_bpk_backend
+    environment:
+      - DB_URL=postgres://siap_admin:siap_password@postgres:5432/siap_bpk?sslmode=disable
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: "1G"
+    volumes:
+      - kas_storage:/mnt/nas_data # Simulating NAS storage bind mount
+
+volumes:
+  db_data:
+  kas_storage:
