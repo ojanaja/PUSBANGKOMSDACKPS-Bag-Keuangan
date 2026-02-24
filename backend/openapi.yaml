@@ -1,0 +1,35 @@
+openapi: 3.1.0
+info:
+  title: SiAP-BPK API
+  version: 1.0.0
+  description: API for SiAP-BPK (Sistem Aplikasi Pencairan - BPK)
+
+servers:
+  - url: /api/v1
+    description: Initial API v1
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: session
+
+security:
+  - cookieAuth: []
+
+paths:
+  /healthz:
+    get:
+      summary: Health check endpoint
+      security: []
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check endpoint (checks DB)
+      security: []
+      responses:
+        '200':
+          description: OK

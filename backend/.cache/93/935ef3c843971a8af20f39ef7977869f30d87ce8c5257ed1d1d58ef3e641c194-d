@@ -1,0 +1,7 @@
+./filter.go
+./jsonpath.go
+./parser.go
+./segment.go
+./selector.go
+./yaml_eval.go
+./yaml_query.go
