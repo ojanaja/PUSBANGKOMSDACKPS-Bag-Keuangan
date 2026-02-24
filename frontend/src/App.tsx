@@ -4,7 +4,7 @@ import AppLayout from './components/layout/AppLayout'
 
 // Lazy load pages
 const DashboardPage = lazy(() => import('./pages/DashboardPage'))
-const SaktiPage = lazy(() => import('./pages/SaktiPage'))
+const AnggaranPage = lazy(() => import('./pages/AnggaranPage'))
 const PaketPage = lazy(() => import('./pages/PaketPage'))
 const ProgresPage = lazy(() => import('./pages/ProgresPage'))
 const KurvaSPage = lazy(() => import('./pages/KurvaSPage'))
@@ -23,7 +23,7 @@ const router = createBrowserRouter([
     element: <AppLayout />,
     children: [
       { index: true, element: <Suspense fallback={<PageLoader />}><DashboardPage /></Suspense> },
-      { path: 'sakti', element: <Suspense fallback={<PageLoader />}><SaktiPage /></Suspense> },
+      { path: 'anggaran', element: <Suspense fallback={<PageLoader />}><AnggaranPage /></Suspense> },
       { path: 'paket', element: <Suspense fallback={<PageLoader />}><PaketPage /></Suspense> },
       { path: 'progres', element: <Suspense fallback={<PageLoader />}><ProgresPage /></Suspense> },
       { path: 'kurva-s', element: <Suspense fallback={<PageLoader />}><KurvaSPage /></Suspense> },

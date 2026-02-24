@@ -1,4 +1,4 @@
-module github.com/vandal/siap-bpk
+module github.com/vandal/keuangan-pusbangkom
 
 go 1.24.0
 

@@ -3,43 +3,43 @@ CREATE TABLE users (
     username VARCHAR(100) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(255) NOT NULL,
-    role VARCHAR(50) NOT NULL, -- SUPER_ADMIN, ADMIN_KEUANGAN, PPK, AUDITOR
+    role VARCHAR(50) NOT NULL, -- SUPER_ADMIN, ADMIN_KEUANGAN, PPK, PENGAWAS
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- SAKTI Hierarchical Reference Tables
-CREATE TABLE sakti_program (
+-- Anggaran Hierarchical Reference Tables
+CREATE TABLE anggaran_program (
     id UUID PRIMARY KEY,
     kode VARCHAR(50) UNIQUE NOT NULL,
     uraian TEXT NOT NULL,
     tahun_anggaran INTEGER NOT NULL
 );
 
-CREATE TABLE sakti_kegiatan (
+CREATE TABLE anggaran_kegiatan (
     id UUID PRIMARY KEY,
-    program_id UUID NOT NULL REFERENCES sakti_program(id),
+    program_id UUID NOT NULL REFERENCES anggaran_program(id),
     kode VARCHAR(50) UNIQUE NOT NULL,
     uraian TEXT NOT NULL
 );
 
-CREATE TABLE sakti_output (
+CREATE TABLE anggaran_output (
     id UUID PRIMARY KEY,
-    kegiatan_id UUID NOT NULL REFERENCES sakti_kegiatan(id),
+    kegiatan_id UUID NOT NULL REFERENCES anggaran_kegiatan(id),
     kode VARCHAR(50) UNIQUE NOT NULL,
     uraian TEXT NOT NULL
 );
 
-CREATE TABLE sakti_sub_output (
+CREATE TABLE anggaran_sub_output (
     id UUID PRIMARY KEY,
-    output_id UUID NOT NULL REFERENCES sakti_output(id),
+    output_id UUID NOT NULL REFERENCES anggaran_output(id),
     kode VARCHAR(50) UNIQUE NOT NULL,
     uraian TEXT NOT NULL
 );
 
-CREATE TABLE sakti_akun (
+CREATE TABLE anggaran_akun (
     id UUID PRIMARY KEY,
-    sub_output_id UUID NOT NULL REFERENCES sakti_sub_output(id),
+    sub_output_id UUID NOT NULL REFERENCES anggaran_sub_output(id),
     kode VARCHAR(50) UNIQUE NOT NULL,
     uraian TEXT NOT NULL,
     pagu DECIMAL(19, 4) NOT NULL DEFAULT 0,
@@ -60,10 +60,10 @@ CREATE TABLE paket_pekerjaan (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Mapping Paket ke Akun SAKTI (M2M)
+-- Mapping Paket ke Akun Anggaran (M2M)
 CREATE TABLE paket_akun_mapping (
     paket_id UUID NOT NULL REFERENCES paket_pekerjaan(id) ON DELETE CASCADE,
-    akun_id UUID NOT NULL REFERENCES sakti_akun(id) ON DELETE CASCADE,
+    akun_id UUID NOT NULL REFERENCES anggaran_akun(id) ON DELETE CASCADE,
     PRIMARY KEY (paket_id, akun_id)
 );
 
@@ -105,9 +105,9 @@ CREATE TABLE dokumen_bukti (
 );
 
 -- Realisasi Keuangan per Akun (Untuk Drill-down SP2D)
-CREATE TABLE realisasi_sakti_sp2d (
+CREATE TABLE realisasi_anggaran_sp2d (
     id UUID PRIMARY KEY,
-    akun_id UUID NOT NULL REFERENCES sakti_akun(id),
+    akun_id UUID NOT NULL REFERENCES anggaran_akun(id),
     bulan INTEGER NOT NULL CHECK (bulan BETWEEN 1 AND 12),
     nomor_sp2d VARCHAR(100) NOT NULL,
     tanggal_sp2d DATE NOT NULL,

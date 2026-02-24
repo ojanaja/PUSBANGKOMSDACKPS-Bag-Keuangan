@@ -4,7 +4,7 @@ import { Check, ChevronRight, Search } from 'lucide-react'
 const steps = ['Profil Paket', 'Mapping Anggaran', 'Target Bulanan']
 const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
 
-// Mock SAKTI accounts for Step 2
+// Mock Anggaran accounts for Step 2
 const mockAkun = [
     { id: '1', kode: '521211', uraian: 'Belanja Bahan', pagu: 500_000_000 },
     { id: '2', kode: '524111', uraian: 'Belanja Perjalanan Dinas', pagu: 300_000_000 },
@@ -65,8 +65,8 @@ export default function PaketPage() {
                             <div className="flex items-center gap-2">
                                 <div
                                     className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${i < step ? 'bg-green-500 text-white' :
-                                            i === step ? 'bg-primary-600 text-white shadow-lg shadow-primary-600/30' :
-                                                'bg-slate-200 text-slate-500'
+                                        i === step ? 'bg-primary-600 text-white shadow-lg shadow-primary-600/30' :
+                                            'bg-slate-200 text-slate-500'
                                         }`}
                                 >
                                     {i < step ? <Check size={16} /> : i + 1}
@@ -108,7 +108,7 @@ export default function PaketPage() {
                     </div>
                 )}
 
-                {/* Step 2: SAKTI Mapping */}
+                {/* Step 2: Anggaran Mapping */}
                 {step === 1 && (
                     <div className="max-w-3xl mx-auto space-y-4">
                         <div className="relative">

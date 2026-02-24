@@ -8,6 +8,44 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AnggaranAkun struct {
+	ID          pgtype.UUID
+	SubOutputID pgtype.UUID
+	Kode        string
+	Uraian      string
+	Pagu        pgtype.Numeric
+	Realisasi   pgtype.Numeric
+	Sisa        pgtype.Numeric
+}
+
+type AnggaranKegiatan struct {
+	ID        pgtype.UUID
+	ProgramID pgtype.UUID
+	Kode      string
+	Uraian    string
+}
+
+type AnggaranOutput struct {
+	ID         pgtype.UUID
+	KegiatanID pgtype.UUID
+	Kode       string
+	Uraian     string
+}
+
+type AnggaranProgram struct {
+	ID            pgtype.UUID
+	Kode          string
+	Uraian        string
+	TahunAnggaran int32
+}
+
+type AnggaranSubOutput struct {
+	ID       pgtype.UUID
+	OutputID pgtype.UUID
+	Kode     string
+	Uraian   string
+}
+
 type DokumenBukti struct {
 	ID             pgtype.UUID
 	PaketID        pgtype.UUID
@@ -57,7 +95,7 @@ type PaketTarget struct {
 	PersenFisik    pgtype.Numeric
 }
 
-type RealisasiSaktiSp2d struct {
+type RealisasiAnggaranSp2d struct {
 	ID          pgtype.UUID
 	AkunID      pgtype.UUID
 	Bulan       int32
@@ -66,44 +104,6 @@ type RealisasiSaktiSp2d struct {
 	NilaiCair   pgtype.Numeric
 	Keterangan  pgtype.Text
 	CreatedAt   pgtype.Timestamptz
-}
-
-type SaktiAkun struct {
-	ID          pgtype.UUID
-	SubOutputID pgtype.UUID
-	Kode        string
-	Uraian      string
-	Pagu        pgtype.Numeric
-	Realisasi   pgtype.Numeric
-	Sisa        pgtype.Numeric
-}
-
-type SaktiKegiatan struct {
-	ID        pgtype.UUID
-	ProgramID pgtype.UUID
-	Kode      string
-	Uraian    string
-}
-
-type SaktiOutput struct {
-	ID         pgtype.UUID
-	KegiatanID pgtype.UUID
-	Kode       string
-	Uraian     string
-}
-
-type SaktiProgram struct {
-	ID            pgtype.UUID
-	Kode          string
-	Uraian        string
-	TahunAnggaran int32
-}
-
-type SaktiSubOutput struct {
-	ID       pgtype.UUID
-	OutputID pgtype.UUID
-	Kode     string
-	Uraian   string
 }
 
 type User struct {

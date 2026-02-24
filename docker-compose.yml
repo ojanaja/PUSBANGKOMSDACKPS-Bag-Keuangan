@@ -1,7 +1,11 @@
+name: keuangan-pusbangkom
+
 services:
-  postgres:
+  # 1. PostgreSQL Database
+  db:
     image: postgres:16-alpine
-    container_name: siap_bpk_db
+    container_name: keuangan-db
+    restart: always
     environment:
       POSTGRES_USER: siap_admin
       POSTGRES_PASSWORD: siap_password
@@ -16,10 +20,10 @@ services:
           cpus: "1"
           memory: "1G"
 
-  # Nginx Reverse Proxy
+  # 3. Nginx Reverse Proxy
   nginx:
     image: nginx:alpine
-    container_name: siap_bpk_nginx
+    container_name: keuangan-nginx
     ports:
       - "80:80"
       - "443:443"
@@ -28,18 +32,18 @@ services:
     depends_on:
       - backend
 
-  # Go Backend
+  # 2. Go Backend API
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: siap_bpk_backend
+    container_name: keuangan-backend
     environment:
       - DB_URL=postgres://siap_admin:siap_password@postgres:5432/siap_bpk?sslmode=disable
     ports:
       - "8080:8080"
     depends_on:
-      postgres:
+      db:
         condition: service_started
     deploy:
       resources:

@@ -52,12 +52,12 @@ export default function KurvaSPage() {
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
                 <h2 className="text-lg font-semibold text-slate-800 mb-4">Visualisasi Kurva-S</h2>
                 <ResponsiveContainer width="100%" height={400}>
-                    <LineChart data={chartData} onClick={handleChartClick}>
+                    <LineChart data={chartData} onClick={handleChartClick as any}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                         <XAxis dataKey="bulan" tick={{ fontSize: 12 }} stroke="#94a3b8" />
                         <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} stroke="#94a3b8" unit="%" />
                         <Tooltip
-                            formatter={(value: number) => `${value.toFixed(1)}%`}
+                            formatter={(value: number | undefined) => value ? `${value.toFixed(1)}%` : '0%'}
                             contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px' }}
                         />
                         <Legend

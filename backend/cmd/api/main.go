@@ -16,9 +16,9 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	openapi_types "github.com/oapi-codegen/runtime/types"
-	"github.com/vandal/siap-bpk/internal/api/handlers"
-	"github.com/vandal/siap-bpk/internal/db"
-	"github.com/vandal/siap-bpk/internal/services"
+	"github.com/vandal/keuangan-pusbangkom/internal/api/handlers"
+	"github.com/vandal/keuangan-pusbangkom/internal/db"
+	"github.com/vandal/keuangan-pusbangkom/internal/services"
 )
 
 // RouterImpl implements the generated ServerInterface.
@@ -45,9 +45,9 @@ func (r *RouterImpl) GetReadyz(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, map[string]string{"status": "UP"})
 }
 
-// ──── SAKTI ────────────────────────────────────────────
+// ──── Anggaran ────────────────────────────────────────────
 
-func (r *RouterImpl) ImportSaktiData(ctx echo.Context) error {
+func (r *RouterImpl) ImportAnggaranData(ctx echo.Context) error {
 	file, err := ctx.FormFile("file")
 	if err != nil {
 		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "file is required"})
@@ -64,7 +64,7 @@ func (r *RouterImpl) ImportSaktiData(ctx echo.Context) error {
 	}
 	defer src.Close()
 
-	rows, err := services.ParseSaktiCSV(src)
+	rows, err := services.ParseAnggaranCSV(src)
 	if err != nil {
 		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": fmt.Sprintf("CSV parse error: %s", err)})
 	}
@@ -82,11 +82,11 @@ func (r *RouterImpl) ImportSaktiData(ctx echo.Context) error {
 		// Program
 		if _, exists := programIDs[row.ProgramKode]; !exists {
 			uid := newPgUUID()
-			p, err := r.queries.InsertSaktiProgram(reqCtx, db.InsertSaktiProgramParams{
+			p, err := r.queries.InsertAnggaranProgram(reqCtx, db.InsertAnggaranProgramParams{
 				ID: uid, Kode: row.ProgramKode, Uraian: row.ProgramUraian, TahunAnggaran: int32(tahun),
 			})
 			if err != nil {
-				slog.Error("InsertSaktiProgram failed", "error", err, "kode", row.ProgramKode)
+				slog.Error("InsertAnggaranProgram failed", "error", err, "kode", row.ProgramKode)
 				continue
 			}
 			programIDs[row.ProgramKode] = p.ID
@@ -96,11 +96,11 @@ func (r *RouterImpl) ImportSaktiData(ctx echo.Context) error {
 		// Kegiatan
 		if _, exists := kegiatanIDs[row.KegiatanKode]; !exists {
 			uid := newPgUUID()
-			k, err := r.queries.InsertSaktiKegiatan(reqCtx, db.InsertSaktiKegiatanParams{
+			k, err := r.queries.InsertAnggaranKegiatan(reqCtx, db.InsertAnggaranKegiatanParams{
 				ID: uid, ProgramID: programIDs[row.ProgramKode], Kode: row.KegiatanKode, Uraian: row.KegiatanUraian,
 			})
 			if err != nil {
-				slog.Error("InsertSaktiKegiatan failed", "error", err, "kode", row.KegiatanKode)
+				slog.Error("InsertAnggaranKegiatan failed", "error", err, "kode", row.KegiatanKode)
 				continue
 			}
 			kegiatanIDs[row.KegiatanKode] = k.ID
@@ -109,11 +109,11 @@ func (r *RouterImpl) ImportSaktiData(ctx echo.Context) error {
 		// Output
 		if _, exists := outputIDs[row.OutputKode]; !exists {
 			uid := newPgUUID()
-			o, err := r.queries.InsertSaktiOutput(reqCtx, db.InsertSaktiOutputParams{
+			o, err := r.queries.InsertAnggaranOutput(reqCtx, db.InsertAnggaranOutputParams{
 				ID: uid, KegiatanID: kegiatanIDs[row.KegiatanKode], Kode: row.OutputKode, Uraian: row.OutputUraian,
 			})
 			if err != nil {
-				slog.Error("InsertSaktiOutput failed", "error", err, "kode", row.OutputKode)
+				slog.Error("InsertAnggaranOutput failed", "error", err, "kode", row.OutputKode)
 				continue
 			}
 			outputIDs[row.OutputKode] = o.ID
@@ -122,11 +122,11 @@ func (r *RouterImpl) ImportSaktiData(ctx echo.Context) error {
 		// SubOutput
 		if _, exists := subOutputIDs[row.SubOutputKode]; !exists {
 			uid := newPgUUID()
-			so, err := r.queries.InsertSaktiSubOutput(reqCtx, db.InsertSaktiSubOutputParams{
+			so, err := r.queries.InsertAnggaranSubOutput(reqCtx, db.InsertAnggaranSubOutputParams{
 				ID: uid, OutputID: outputIDs[row.OutputKode], Kode: row.SubOutputKode, Uraian: row.SubOutputUraian,
 			})
 			if err != nil {
-				slog.Error("InsertSaktiSubOutput failed", "error", err, "kode", row.SubOutputKode)
+				slog.Error("InsertAnggaranSubOutput failed", "error", err, "kode", row.SubOutputKode)
 				continue
 			}
 			subOutputIDs[row.SubOutputKode] = so.ID
@@ -134,7 +134,7 @@ func (r *RouterImpl) ImportSaktiData(ctx echo.Context) error {
 
 		// Akun
 		uid := newPgUUID()
-		_, err := r.queries.InsertSaktiAkun(reqCtx, db.InsertSaktiAkunParams{
+		_, err := r.queries.InsertAnggaranAkun(reqCtx, db.InsertAnggaranAkunParams{
 			ID:          uid,
 			SubOutputID: subOutputIDs[row.SubOutputKode],
 			Kode:        row.AkunKode,
@@ -144,23 +144,23 @@ func (r *RouterImpl) ImportSaktiData(ctx echo.Context) error {
 			Sisa:        float64ToNumeric(row.Sisa),
 		})
 		if err != nil {
-			slog.Error("InsertSaktiAkun failed", "error", err, "kode", row.AkunKode)
+			slog.Error("InsertAnggaranAkun failed", "error", err, "kode", row.AkunKode)
 			continue
 		}
 		akunCount++
 	}
 
-	return ctx.JSON(http.StatusOK, handlers.SaktiImportResult{
+	return ctx.JSON(http.StatusOK, handlers.AnggaranImportResult{
 		ProgramsUpserted: &programCount,
 		AkunUpserted:     &akunCount,
 	})
 }
 
-func (r *RouterImpl) GetSaktiTree(ctx echo.Context, params handlers.GetSaktiTreeParams) error {
-	rows, err := r.queries.GetSaktiTree(ctx.Request().Context(), int32(params.Tahun))
+func (r *RouterImpl) GetAnggaranTree(ctx echo.Context, params handlers.GetAnggaranTreeParams) error {
+	rows, err := r.queries.GetAnggaranTree(ctx.Request().Context(), int32(params.Tahun))
 	if err != nil {
-		slog.Error("GetSaktiTree failed", "error", err)
-		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to retrieve SAKTI tree"})
+		slog.Error("GetAnggaranTree failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to retrieve Anggaran tree"})
 	}
 	return ctx.JSON(http.StatusOK, rows)
 }
@@ -418,7 +418,7 @@ func main() {
 	// 2. Initialize Database Connection
 	dbUrl := os.Getenv("DB_URL")
 	if dbUrl == "" {
-		dbUrl = "postgres://siap_admin:siap_password@localhost:5432/siap_bpk?sslmode=disable"
+		dbUrl = "postgres://siap_admin:siap_password@localhost:5432/siap_pusbangkom?sslmode=disable"
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

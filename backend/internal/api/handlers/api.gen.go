@@ -30,6 +30,13 @@ const (
 	KEUANGAN UploadDocumentMultipartBodyKategori = "KEUANGAN"
 )
 
+// AnggaranImportResult defines model for AnggaranImportResult.
+type AnggaranImportResult struct {
+	AkunUpserted     *int `json:"akun_upserted,omitempty"`
+	ProgramsUpserted *int `json:"programs_upserted,omitempty"`
+	Sp2dInserted     *int `json:"sp2d_inserted,omitempty"`
+}
+
 // DocumentMeta defines model for DocumentMeta.
 type DocumentMeta struct {
 	Bulan          *int                `json:"bulan,omitempty"`
@@ -44,11 +51,15 @@ type DocumentMeta struct {
 	PaketId        *openapi_types.UUID `json:"paket_id,omitempty"`
 }
 
-// SaktiImportResult defines model for SaktiImportResult.
-type SaktiImportResult struct {
-	AkunUpserted     *int `json:"akun_upserted,omitempty"`
-	ProgramsUpserted *int `json:"programs_upserted,omitempty"`
-	Sp2dInserted     *int `json:"sp2d_inserted,omitempty"`
+// ImportAnggaranDataMultipartBody defines parameters for ImportAnggaranData.
+type ImportAnggaranDataMultipartBody struct {
+	File          openapi_types.File `json:"file"`
+	TahunAnggaran int                `json:"tahun_anggaran"`
+}
+
+// GetAnggaranTreeParams defines parameters for GetAnggaranTree.
+type GetAnggaranTreeParams struct {
+	Tahun int `form:"tahun" json:"tahun"`
 }
 
 // UploadDocumentMultipartBody defines parameters for UploadDocument.
@@ -89,16 +100,8 @@ type UpdateRealisasiFisikJSONBody struct {
 	PersenAktual   float32 `json:"persen_aktual"`
 }
 
-// ImportSaktiDataMultipartBody defines parameters for ImportSaktiData.
-type ImportSaktiDataMultipartBody struct {
-	File          openapi_types.File `json:"file"`
-	TahunAnggaran int                `json:"tahun_anggaran"`
-}
-
-// GetSaktiTreeParams defines parameters for GetSaktiTree.
-type GetSaktiTreeParams struct {
-	Tahun int `form:"tahun" json:"tahun"`
-}
+// ImportAnggaranDataMultipartRequestBody defines body for ImportAnggaranData for multipart/form-data ContentType.
+type ImportAnggaranDataMultipartRequestBody ImportAnggaranDataMultipartBody
 
 // UploadDocumentMultipartRequestBody defines body for UploadDocument for multipart/form-data ContentType.
 type UploadDocumentMultipartRequestBody UploadDocumentMultipartBody
@@ -109,11 +112,14 @@ type CreatePaketJSONRequestBody CreatePaketJSONBody
 // UpdateRealisasiFisikJSONRequestBody defines body for UpdateRealisasiFisik for application/json ContentType.
 type UpdateRealisasiFisikJSONRequestBody UpdateRealisasiFisikJSONBody
 
-// ImportSaktiDataMultipartRequestBody defines body for ImportSaktiData for multipart/form-data ContentType.
-type ImportSaktiDataMultipartRequestBody ImportSaktiDataMultipartBody
-
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Import Anggaran data from Excel/CSV
+	// (POST /anggaran/import)
+	ImportAnggaranData(ctx echo.Context) error
+	// Get Anggaran hierarchy tree
+	// (GET /anggaran/tree)
+	GetAnggaranTree(ctx echo.Context, params GetAnggaranTreeParams) error
 	// Upload a document with CAS deduplication
 	// (POST /documents)
 	UploadDocument(ctx echo.Context) error
@@ -141,17 +147,42 @@ type ServerInterface interface {
 	// Readiness check endpoint (checks DB)
 	// (GET /readyz)
 	GetReadyz(ctx echo.Context) error
-	// Import SAKTI data from Excel/CSV
-	// (POST /sakti/import)
-	ImportSaktiData(ctx echo.Context) error
-	// Get SAKTI hierarchy tree
-	// (GET /sakti/tree)
-	GetSaktiTree(ctx echo.Context, params GetSaktiTreeParams) error
 }
 
 // ServerInterfaceWrapper converts echo contexts to parameters.
 type ServerInterfaceWrapper struct {
 	Handler ServerInterface
+}
+
+// ImportAnggaranData converts echo context to params.
+func (w *ServerInterfaceWrapper) ImportAnggaranData(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(CookieAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.ImportAnggaranData(ctx)
+	return err
+}
+
+// GetAnggaranTree converts echo context to params.
+func (w *ServerInterfaceWrapper) GetAnggaranTree(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(CookieAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAnggaranTreeParams
+	// ------------- Required query parameter "tahun" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "tahun", ctx.QueryParams(), &params.Tahun)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter tahun: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetAnggaranTree(ctx, params)
+	return err
 }
 
 // UploadDocument converts echo context to params.
@@ -286,37 +317,6 @@ func (w *ServerInterfaceWrapper) GetReadyz(ctx echo.Context) error {
 	return err
 }
 
-// ImportSaktiData converts echo context to params.
-func (w *ServerInterfaceWrapper) ImportSaktiData(ctx echo.Context) error {
-	var err error
-
-	ctx.Set(CookieAuthScopes, []string{})
-
-	// Invoke the callback with all the unmarshaled arguments
-	err = w.Handler.ImportSaktiData(ctx)
-	return err
-}
-
-// GetSaktiTree converts echo context to params.
-func (w *ServerInterfaceWrapper) GetSaktiTree(ctx echo.Context) error {
-	var err error
-
-	ctx.Set(CookieAuthScopes, []string{})
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params GetSaktiTreeParams
-	// ------------- Required query parameter "tahun" -------------
-
-	err = runtime.BindQueryParameter("form", true, true, "tahun", ctx.QueryParams(), &params.Tahun)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter tahun: %s", err))
-	}
-
-	// Invoke the callback with all the unmarshaled arguments
-	err = w.Handler.GetSaktiTree(ctx, params)
-	return err
-}
-
 // This is a simple interface which specifies echo.Route addition functions which
 // are present on both echo.Echo and echo.Group, since we want to allow using
 // either of them for path registration
@@ -345,6 +345,8 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 		Handler: si,
 	}
 
+	router.POST(baseURL+"/anggaran/import", wrapper.ImportAnggaranData)
+	router.GET(baseURL+"/anggaran/tree", wrapper.GetAnggaranTree)
 	router.POST(baseURL+"/documents", wrapper.UploadDocument)
 	router.GET(baseURL+"/documents/:id", wrapper.DownloadDocument)
 	router.GET(baseURL+"/healthz", wrapper.GetHealthz)
@@ -354,37 +356,35 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 	router.GET(baseURL+"/paket/:id/documents", wrapper.GetDocumentsByPaket)
 	router.PUT(baseURL+"/paket/:id/realisasi", wrapper.UpdateRealisasiFisik)
 	router.GET(baseURL+"/readyz", wrapper.GetReadyz)
-	router.POST(baseURL+"/sakti/import", wrapper.ImportSaktiData)
-	router.GET(baseURL+"/sakti/tree", wrapper.GetSaktiTree)
 
 }
 
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/8xY3W7bOBN9FYLfd9ECTpx0uwus75ymzRrZ7Rp1uzeBYUyksTWxRLL8SesGefcFSflH",
-	"Eu0mTVDsnSUOh8MzZ45mfMczWSkpUFjDB3fcZAVWEH6ey8xVKOxfaME/Ky0VaksYVq9dCcL/sCuFfMBJ",
-	"WFyg5vc9nmkEi/kMrF+fS135XzwHi0eWKuS99SZjNYmF3zOnEmcFmGJmCnj16287nltGhr7h7HplYxjd",
-	"0ylvnOoc5akDb1CQmeVy6e+YPG0JFhdSU3Kxogpn8W1iVWpakIByJqBKWyhYop09KNb7zRt5fYOZ9dsn",
-	"sLQ0qpTU9gMaV9pugmDpxMwpg9pinoZKabnQUJnvmBn1Kp+R2G/SjdDvwsxpsquJZ1QMKZNySTh0tvBP",
-	"JPigfsV7PCLFDRpDUmxRAEWXuOL33iWJufQ7czSZJmW94YAPxyM2l5pNaDg+OhtfshcTMhYrNlQlLcEQ",
-	"G6PIgDQIdsTOxpcvvXeypXe/2TQcj3iP36I20evp8cnxScilQgGK+ID/cnx6fMJ97mwR7tPP6xIJT0qa",
-	"kAafBPCxjXI+4J9UKSFf1xLvcY2fHRp7JvNVxERYvzC445UrLSnQtu8ZcZRDrLtYko+qQF8oDWZdkwC9",
-	"enodoHAVH1zxy7efhu8vhu95j78bTUaXfNp7Ksc9LqQ9wa5i/DsOevVld4JpRz7tcrDh1GqH4YVRUpiI",
-	"4KuT01YKQKmSspC9/o2Roon//zXO+YD/r7/VzH4tmP2GWoazmyxdrzMXCIG5R+j1ye9dPm8sv5AtmIEK",
-	"mRdGBqVGyFcMv5KxJtaYqyqf1zXNGLC8sfvNcMJyzN3mVh56WBgP8vmGvFPva0vm/h3l9z6uBSYIfS6/",
-	"iBalFWio0KL2fuvC9kWyLeuQw2YyejvAfo8d007iTrq4vaMS2TqXAdzXXaP30rK5dCJv4be+1S6C1ys2",
-	"Oj8AWIFQ2uLbXqQu0P5Rmzwk/r8vG7rJB1fT3QijK5YVmC0ZilxJElFp+6FO9obxJxk7DhYPicJbMzln",
-	"0WcTpLAGZRkXmcIl6huAXVLFg6a++pNy+Cb0Bttw9mnh4UJMfOkoD7/JYmUe1ACsvy9awyrKnAG7RJ3U",
-	"wFL6D0lySUAFs00GEiK4cJ1l4arrqNQW9AJtM/QHy7xCbVDM5mRomfReGyzRgVg0vKxtUs1FE5mWNO9c",
-	"dwezDUKNCz9Bk5ukDHxhdV/ZImVkFAMm8MsDiLmpl8Mqd4GbmvlvqFuEIEcLVD5a3S48KMFBW9PSsDQb",
-	"m30AbfTwbPXTsOrVTj87DP1M7XXdHmwddXrU6WPUb3v/LpCbtdB1AlsXw77PxA6sGqEkUyuJcsl20Y9J",
-	"H9Z270Jp/ywOPocYH5oLwYIFL0cihxLSchkVC5bWQZnWq101Wue9ue3HdCdBh00emAt5yTtdl3/LKils",
-	"Ua6YKlaGMihZyPO3dsO1W2uhlTvYOnyIFs/QOXhPJNCYVvPAXoRnw87PXsZGwvixsk9hrtw/0sS5M4yg",
-	"535GecaZ5hGDi4XCiRmIxQJ0mnHpoaK17wlceZa5oTvJJ4aHuM6MyzI0Zu7qL0CCCmeQszobLa7WPibD",
-	"y48j5vPA5lpW7O3XDMv+m8k/O0QNNjVRIyWsRjxE1nCLj94orVUtuQ45OKhXPybf8XI+2HDDhHhHi4JQ",
-	"g86KVbBN3bxZTs2/Lq6mPhqD+nZ9x1a2BFmCkg3HI3Z7ynvc6ZIPeB8U9W9P+f30/t8AAAD//2P7qp12",
-	"EwAA",
+	"H4sIAAAAAAAC/8xYXW/bNhT9KwS3hxZw4qTrBsxvTtxmRtbUqNe9FIFxI15bN5ZIlR9p3SL/fSBpKfqy",
+	"6zZBsaco5CV5ee45R1f+yhOVF0qitIaPvnKTpJhDeBzL1Qo0yGleKG3foXGZ9eOFVgVqSxiiYO3kwhUG",
+	"tUXhB+ymQD7iJC2uUPP7gV+w0pCbb4SZ4oVYkNwdcj8oh9TNLSbWL5qoxOUo7Ru00E3uxmUg+09LNIJF",
+	"sYBwp6XSuX/iAiweWcqRV4cZq0mu/JolZbhIwaQLk8KL3/+o7dwKMvQFFzcbG9Ponk6icapzJPoOvEVJ",
+	"ZiHU2t+x97Q1WFwpTb2TOeW4iKM9s0rTiiRkCwl5f0QBa7SLg3Lt1sZXFBOnyW7mnlQRikSpNeHY2dT/",
+	"R5KPtkN8wGMe3KAxpOTDGVDQJW74vd+S5FL5lQJNoqmwPnDEx7MpWyrN5jSeHc3ez8/GVxeXb9/MJ+Pz",
+	"y9mcPZuTsZizcZHRGgyxGcoESINkR6wT/tyfTDbzR+/YcDyb8gG/Q23i+afHJ8cnAdMCJRTER/y349Pj",
+	"E+4xtGm4+RC2ehpSEFRgqzLhr+cs+LtMBR/xKLhSfhOwwAdc40eHxp4psYk4SosyLM5dZqkAbYe+RkcC",
+	"ohKikrua8PxsFPSGJOhNH/0spE4uyrx3SNInRtor9kPcu7PuusuNxjqrHYYBUyhpYpYvTk5a14SiyCgJ",
+	"KA1vjZLNO/6qcclH/Jfhg50Nt1427DWykEOTRXGeGZckaMzSZR6DlzGRZuQZCLYtSCS6y3OPYbVHeSTz",
+	"1WBLrXL26nOC2fB8/m8AaGU8XuMKIr/LA0OsxlCjFfbQ4wIrbvzj4zzHNORoUftNt6r66DAUdSuqUBLe",
+	"Rn1QQ7BT2uv+krSUV17Upxxu2wLkAmtopIQadJJuQvhuIMTW1c1ukbwvMgWitP+nFMiel8Z3aOf7rBul",
+	"yz0Ol6/ej68uxld8wF9P59PLmnZ+1JZ79FltMNhetpZMO/MfE+/pk4m38YLvEW05z1wgBIoo2j+7VK0i",
+	"P5FNmYEcmX+XM8g0gtgw/EzGmhZ9I80YMNFYfT6eM4HCVbeqcXlSkbdF5uFXEvc7ZT1Rn2SL0n269u+T",
+	"B1mHGu7W9LfYcZDEX1OGrKxlAPdlN+hKWbZUTooWfuWt6gjebNh0sgewFCGz6Zd9BvjXNuSQ/N9eNpoR",
+	"PvpwXc8wbsWSFJM1QykKRTK6+jDoZGcaf5OxsxBxSBY+mqkli3s2QQpzkGVxkhW4Rn0LUCdVPOjaq7/X",
+	"Ds9DO/uQzi4v3C/EntaeRHgmi7k5qGctmzatYRNtzoBdo+71wEz5fqx3SkIOi6oCPSa4cp1p6fKb6NQW",
+	"9AptM/WDbb5AbVAulmRo3bv7NmCNDuSqsUsZ0/et0kSmZc2169YwqxBqXPgRntwkZeAL234KtUgZGcWA",
+	"Sfx0ADErvex3uQusNPP/cLcIgUALlH23u/nmJkLT9rR+WJqNzS6AKj882/w0rAb9bWPZHjy2TSzd7+H+",
+	"XSCrufApB6wUw67XRA1WjZCR2TpJ4XrbRf9l/66Mex2k/bM4+BRmvO+nDLBgwduRFJBBv11Gx4K1dZD1",
+	"+1Xdjcq6N5c94kOuSYeqDsyFuohO1+VHWa6kTbMNK9KNoQQyFur8pd1w1bUWWrm9rcO7GPEEnYPfiSQa",
+	"02oe2LPwv2GTs+cRotoOzZ9APlx7hhjUdyUFW5+kkixBxsazKbs75QPudMZHfAgFDe9O+f31/X8BAAD/",
+	"/x0XMbbBEwAA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

@@ -28,8 +28,8 @@ const navItems: NavItem[] = [
         roles: ['SUPER_ADMIN', 'ADMIN_KEUANGAN', 'PPK', 'AUDITOR'],
     },
     {
-        label: 'Integrasi SAKTI',
-        path: '/sakti',
+        label: 'Integrasi Anggaran',
+        path: '/anggaran',
         icon: <Database size={20} />,
         roles: ['SUPER_ADMIN', 'ADMIN_KEUANGAN'],
     },
@@ -80,20 +80,16 @@ export default function Sidebar() {
         >
             {/* Brand */}
             <div className="flex items-center h-[60px] px-4 border-b border-white/10">
+                <div
+                    className={`w-10 h-10 rounded-lg bg-indigo-500 flex items-center justify-center text-white font-bold shrink-0 transition-opacity ${isCollapsed ? 'opacity-100' : ''
+                        }`}
+                >
+                    KP
+                </div>
                 {!isCollapsed && (
-                    <div className="flex items-center gap-2 overflow-hidden">
-                        <div className="w-8 h-8 rounded-lg bg-primary-500 flex items-center justify-center font-bold text-sm">
-                            SA
-                        </div>
-                        <span className="font-semibold text-sm tracking-tight whitespace-nowrap">
-                            SiAP-BPK
-                        </span>
-                    </div>
-                )}
-                {isCollapsed && (
-                    <div className="w-8 h-8 rounded-lg bg-primary-500 flex items-center justify-center font-bold text-sm mx-auto">
-                        SA
-                    </div>
+                    <span className="font-bold text-lg whitespace-nowrap overflow-hidden text-ellipsis ml-3">
+                        Keuangan Pusbangkom
+                    </span>
                 )}
             </div>
 

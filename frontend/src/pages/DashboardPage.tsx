@@ -37,7 +37,7 @@ export default function DashboardPage() {
             {/* Page Header */}
             <div>
                 <h1 className="text-2xl font-bold text-slate-900">Executive Dashboard</h1>
-                <p className="text-sm text-slate-500 mt-1">Kesiapan Audit & Early Warning System</p>
+                <p className="text-sm text-slate-500 mt-1">Kesiapan Pemeriksaan & Early Warning System</p>
             </div>
 
             {/* Summary Stats */}
@@ -45,7 +45,7 @@ export default function DashboardPage() {
                 {[
                     { label: 'Total Paket', value: mockPaket.length, color: 'bg-primary-50 text-primary-700 border-primary-200' },
                     { label: 'Perlu Perhatian', value: mockPaket.filter(p => p.status !== 'LENGKAP').length, color: 'bg-amber-50 text-amber-700 border-amber-200' },
-                    { label: 'Siap Audit', value: mockPaket.filter(p => p.status === 'LENGKAP').length, color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+                    { label: 'Siap Diperiksa', value: mockPaket.filter(p => p.status === 'LENGKAP').length, color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
                 ].map((stat) => (
                     <div key={stat.label} className={`rounded-xl border p-5 ${stat.color}`}>
                         <p className="text-sm font-medium opacity-80">{stat.label}</p>
@@ -57,7 +57,7 @@ export default function DashboardPage() {
             {/* Compliance Table */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-slate-100">
-                    <h2 className="text-lg font-semibold text-slate-800">Matriks Kepatuhan Audit</h2>
+                    <h2 className="text-lg font-semibold text-slate-800">Matriks Kepatuhan Pemeriksaan</h2>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -67,7 +67,7 @@ export default function DashboardPage() {
                                 <th className="px-6 py-3 text-right">Pagu</th>
                                 <th className="px-6 py-3 text-center">Realisasi Keu.</th>
                                 <th className="px-6 py-3 text-center">Realisasi Fisik</th>
-                                <th className="px-6 py-3 text-center">Status Audit</th>
+                                <th className="px-6 py-3 text-center">Status Pemeriksaan</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">

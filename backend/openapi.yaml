@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
-  title: SiAP-BPK API
+  title: SiAP-PUSBANGKOMSDACKPS API
   version: 1.0.0
-  description: API for SiAP-BPK (Sistem Aplikasi Pencairan - BPK)
+  description: API for SiAP-PUSBANGKOMSDACKPS (Sistem Aplikasi Pencairan - PUSBANGKOMSDACKPS)
 
 servers:
   - url: /api/v1
@@ -22,7 +22,7 @@ components:
         message:
           type: string
 
-    SaktiImportResult:
+    AnggaranImportResult:
       type: object
       properties:
         programs_upserted:
@@ -79,11 +79,11 @@ paths:
       responses:
         '200':
           description: OK
-  /sakti/import:
+  /anggaran/import:
     post:
-      operationId: importSaktiData
-      summary: Import SAKTI data from Excel/CSV
-      tags: [SAKTI]
+      operationId: importAnggaranData
+      summary: Import Anggaran data from Excel/CSV
+      tags: [Anggaran]
       requestBody:
         required: true
         content:
@@ -105,14 +105,14 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SaktiImportResult'
+                $ref: '#/components/schemas/AnggaranImportResult'
         '400':
           description: Bad request
-  /sakti/tree:
+  /anggaran/tree:
     get:
-      operationId: getSaktiTree
-      summary: Get SAKTI hierarchy tree
-      tags: [SAKTI]
+      operationId: getAnggaranTree
+      summary: Get Anggaran hierarchy tree
+      tags: [Anggaran]
       parameters:
         - name: tahun
           in: query
@@ -121,7 +121,7 @@ paths:
             type: integer
       responses:
         '200':
-          description: SAKTI tree data
+          description: Anggaran tree data
   /documents:
     post:
       operationId: uploadDocument

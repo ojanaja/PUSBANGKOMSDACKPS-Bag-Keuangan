@@ -5,8 +5,7 @@ import { useSidebarStore } from '@/stores/sidebarStore'
 import { useState, useRef, useEffect } from 'react'
 
 const breadcrumbMap: Record<string, string> = {
-    '/': 'Dashboard',
-    '/sakti': 'Integrasi SAKTI',
+    '/anggaran': 'Integrasi Anggaran',
     '/paket': 'Paket Pekerjaan',
     '/paket/tambah': 'Tambah Paket',
     '/progres': 'Progres & Dokumen',
