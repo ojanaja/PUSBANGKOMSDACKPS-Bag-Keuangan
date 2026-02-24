@@ -8,27 +8,179 @@ import (
 	"compress/gzip"
 	"encoding/base64"
 	"fmt"
+	"net/http"
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/labstack/echo/v4"
+	"github.com/oapi-codegen/runtime"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
+
+const (
+	CookieAuthScopes = "cookieAuth.Scopes"
+)
+
+// Defines values for UploadDocumentMultipartBodyKategori.
+const (
+	FISIK    UploadDocumentMultipartBodyKategori = "FISIK"
+	KEUANGAN UploadDocumentMultipartBodyKategori = "KEUANGAN"
+)
+
+// DocumentMeta defines model for DocumentMeta.
+type DocumentMeta struct {
+	Bulan          *int                `json:"bulan,omitempty"`
+	CreatedAt      *time.Time          `json:"created_at,omitempty"`
+	FileHashSha256 *string             `json:"file_hash_sha256,omitempty"`
+	FileSizeBytes  *int                `json:"file_size_bytes,omitempty"`
+	Id             *openapi_types.UUID `json:"id,omitempty"`
+	JenisDokumen   *string             `json:"jenis_dokumen,omitempty"`
+	Kategori       *string             `json:"kategori,omitempty"`
+	MimeType       *string             `json:"mime_type,omitempty"`
+	OriginalName   *string             `json:"original_name,omitempty"`
+	PaketId        *openapi_types.UUID `json:"paket_id,omitempty"`
+}
+
+// SaktiImportResult defines model for SaktiImportResult.
+type SaktiImportResult struct {
+	AkunUpserted     *int `json:"akun_upserted,omitempty"`
+	ProgramsUpserted *int `json:"programs_upserted,omitempty"`
+	Sp2dInserted     *int `json:"sp2d_inserted,omitempty"`
+}
+
+// UploadDocumentMultipartBody defines parameters for UploadDocument.
+type UploadDocumentMultipartBody struct {
+	Bulan        int                                 `json:"bulan"`
+	File         openapi_types.File                  `json:"file"`
+	JenisDokumen string                              `json:"jenis_dokumen"`
+	Kategori     UploadDocumentMultipartBodyKategori `json:"kategori"`
+	PaketId      openapi_types.UUID                  `json:"paket_id"`
+}
+
+// UploadDocumentMultipartBodyKategori defines parameters for UploadDocument.
+type UploadDocumentMultipartBodyKategori string
+
+// CreatePaketJSONBody defines parameters for CreatePaket.
+type CreatePaketJSONBody struct {
+	AkunIds   *[]openapi_types.UUID `json:"akun_ids,omitempty"`
+	Kasatker  string                `json:"kasatker"`
+	Lokasi    string                `json:"lokasi"`
+	NamaPaket string                `json:"nama_paket"`
+	PaguPaket float32               `json:"pagu_paket"`
+	Targets   *[]struct {
+		Bulan          *int     `json:"bulan,omitempty"`
+		PersenFisik    *float32 `json:"persen_fisik,omitempty"`
+		PersenKeuangan *float32 `json:"persen_keuangan,omitempty"`
+	} `json:"targets,omitempty"`
+}
+
+// GetDocumentsByPaketParams defines parameters for GetDocumentsByPaket.
+type GetDocumentsByPaketParams struct {
+	Bulan *int `form:"bulan,omitempty" json:"bulan,omitempty"`
+}
+
+// UpdateRealisasiFisikJSONBody defines parameters for UpdateRealisasiFisik.
+type UpdateRealisasiFisikJSONBody struct {
+	Bulan          int     `json:"bulan"`
+	CatatanKendala *string `json:"catatan_kendala,omitempty"`
+	PersenAktual   float32 `json:"persen_aktual"`
+}
+
+// ImportSaktiDataMultipartBody defines parameters for ImportSaktiData.
+type ImportSaktiDataMultipartBody struct {
+	File          openapi_types.File `json:"file"`
+	TahunAnggaran int                `json:"tahun_anggaran"`
+}
+
+// GetSaktiTreeParams defines parameters for GetSaktiTree.
+type GetSaktiTreeParams struct {
+	Tahun int `form:"tahun" json:"tahun"`
+}
+
+// UploadDocumentMultipartRequestBody defines body for UploadDocument for multipart/form-data ContentType.
+type UploadDocumentMultipartRequestBody UploadDocumentMultipartBody
+
+// CreatePaketJSONRequestBody defines body for CreatePaket for application/json ContentType.
+type CreatePaketJSONRequestBody CreatePaketJSONBody
+
+// UpdateRealisasiFisikJSONRequestBody defines body for UpdateRealisasiFisik for application/json ContentType.
+type UpdateRealisasiFisikJSONRequestBody UpdateRealisasiFisikJSONBody
+
+// ImportSaktiDataMultipartRequestBody defines body for ImportSaktiData for multipart/form-data ContentType.
+type ImportSaktiDataMultipartRequestBody ImportSaktiDataMultipartBody
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Upload a document with CAS deduplication
+	// (POST /documents)
+	UploadDocument(ctx echo.Context) error
+	// Download a document by ID
+	// (GET /documents/{id})
+	DownloadDocument(ctx echo.Context, id openapi_types.UUID) error
 	// Health check endpoint
 	// (GET /healthz)
 	GetHealthz(ctx echo.Context) error
+	// List all paket pekerjaan
+	// (GET /paket)
+	ListPaket(ctx echo.Context) error
+	// Create a new paket pekerjaan
+	// (POST /paket)
+	CreatePaket(ctx echo.Context) error
+	// Get paket by ID
+	// (GET /paket/{id})
+	GetPaket(ctx echo.Context, id openapi_types.UUID) error
+	// Get documents for a paket
+	// (GET /paket/{id}/documents)
+	GetDocumentsByPaket(ctx echo.Context, id openapi_types.UUID, params GetDocumentsByPaketParams) error
+	// Update monthly physical realization
+	// (PUT /paket/{id}/realisasi)
+	UpdateRealisasiFisik(ctx echo.Context, id openapi_types.UUID) error
 	// Readiness check endpoint (checks DB)
 	// (GET /readyz)
 	GetReadyz(ctx echo.Context) error
+	// Import SAKTI data from Excel/CSV
+	// (POST /sakti/import)
+	ImportSaktiData(ctx echo.Context) error
+	// Get SAKTI hierarchy tree
+	// (GET /sakti/tree)
+	GetSaktiTree(ctx echo.Context, params GetSaktiTreeParams) error
 }
 
 // ServerInterfaceWrapper converts echo contexts to parameters.
 type ServerInterfaceWrapper struct {
 	Handler ServerInterface
+}
+
+// UploadDocument converts echo context to params.
+func (w *ServerInterfaceWrapper) UploadDocument(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(CookieAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.UploadDocument(ctx)
+	return err
+}
+
+// DownloadDocument converts echo context to params.
+func (w *ServerInterfaceWrapper) DownloadDocument(ctx echo.Context) error {
+	var err error
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", ctx.Param("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter id: %s", err))
+	}
+
+	ctx.Set(CookieAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.DownloadDocument(ctx, id)
+	return err
 }
 
 // GetHealthz converts echo context to params.
@@ -40,12 +192,128 @@ func (w *ServerInterfaceWrapper) GetHealthz(ctx echo.Context) error {
 	return err
 }
 
+// ListPaket converts echo context to params.
+func (w *ServerInterfaceWrapper) ListPaket(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(CookieAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.ListPaket(ctx)
+	return err
+}
+
+// CreatePaket converts echo context to params.
+func (w *ServerInterfaceWrapper) CreatePaket(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(CookieAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.CreatePaket(ctx)
+	return err
+}
+
+// GetPaket converts echo context to params.
+func (w *ServerInterfaceWrapper) GetPaket(ctx echo.Context) error {
+	var err error
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", ctx.Param("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter id: %s", err))
+	}
+
+	ctx.Set(CookieAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetPaket(ctx, id)
+	return err
+}
+
+// GetDocumentsByPaket converts echo context to params.
+func (w *ServerInterfaceWrapper) GetDocumentsByPaket(ctx echo.Context) error {
+	var err error
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", ctx.Param("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter id: %s", err))
+	}
+
+	ctx.Set(CookieAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetDocumentsByPaketParams
+	// ------------- Optional query parameter "bulan" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "bulan", ctx.QueryParams(), &params.Bulan)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter bulan: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetDocumentsByPaket(ctx, id, params)
+	return err
+}
+
+// UpdateRealisasiFisik converts echo context to params.
+func (w *ServerInterfaceWrapper) UpdateRealisasiFisik(ctx echo.Context) error {
+	var err error
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", ctx.Param("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter id: %s", err))
+	}
+
+	ctx.Set(CookieAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.UpdateRealisasiFisik(ctx, id)
+	return err
+}
+
 // GetReadyz converts echo context to params.
 func (w *ServerInterfaceWrapper) GetReadyz(ctx echo.Context) error {
 	var err error
 
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.GetReadyz(ctx)
+	return err
+}
+
+// ImportSaktiData converts echo context to params.
+func (w *ServerInterfaceWrapper) ImportSaktiData(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(CookieAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.ImportSaktiData(ctx)
+	return err
+}
+
+// GetSaktiTree converts echo context to params.
+func (w *ServerInterfaceWrapper) GetSaktiTree(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(CookieAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetSaktiTreeParams
+	// ------------- Required query parameter "tahun" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "tahun", ctx.QueryParams(), &params.Tahun)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter tahun: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetSaktiTree(ctx, params)
 	return err
 }
 
@@ -77,20 +345,46 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 		Handler: si,
 	}
 
+	router.POST(baseURL+"/documents", wrapper.UploadDocument)
+	router.GET(baseURL+"/documents/:id", wrapper.DownloadDocument)
 	router.GET(baseURL+"/healthz", wrapper.GetHealthz)
+	router.GET(baseURL+"/paket", wrapper.ListPaket)
+	router.POST(baseURL+"/paket", wrapper.CreatePaket)
+	router.GET(baseURL+"/paket/:id", wrapper.GetPaket)
+	router.GET(baseURL+"/paket/:id/documents", wrapper.GetDocumentsByPaket)
+	router.PUT(baseURL+"/paket/:id/realisasi", wrapper.UpdateRealisasiFisik)
 	router.GET(baseURL+"/readyz", wrapper.GetReadyz)
+	router.POST(baseURL+"/sakti/import", wrapper.ImportSaktiData)
+	router.GET(baseURL+"/sakti/tree", wrapper.GetSaktiTree)
 
 }
 
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/6yRP4vcMBDFv4p41R3o/Cfp1HkJJMZFTLY8thDyXDysLQlJXnAOf/cg+xKyCaS6yp7R",
-	"zI83773CuNk7SzZFqFdEMkvgtJ7NSDPtLePclalZ0pgrtlBvLUhYPRMUIsXIzkIirT43tOeOVmzbJsH2",
-	"xeXNgaIJ7FMeVGj6Vry4IM7c9E+nvhMPZ46JZtH4ia86sujJGs1BW/EkTn33mOmcpoz/vdT0LSRuFOJB",
-	"rYuqqLBJOE9We4bCx6IuKkh4ncb9nnIkPaXxR/7/Til/nKegs7B2gMJnSl/eRiQCRe9sPKz4UFX/XvK1",
-	"Qz7zl3NQzxeJuMyzDisUDpQwI5mrIDt4xzbtG2UgPaz/1fHtmHgHGZnElmL8S4l42OsoPp0ej7z+INyH",
-	"/3zZMpJC9nt/vVfQWk6spxyKuNWQWMIEhVJ7Lm81tsv2MwAA///APQGnbgIAAA==",
+	"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",
+	"EwAA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

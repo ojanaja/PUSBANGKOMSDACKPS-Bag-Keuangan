@@ -15,12 +15,57 @@ components:
       in: cookie
       name: session
 
+  schemas:
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+
+    SaktiImportResult:
+      type: object
+      properties:
+        programs_upserted:
+          type: integer
+        akun_upserted:
+          type: integer
+        sp2d_inserted:
+          type: integer
+
+    DocumentMeta:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        paket_id:
+          type: string
+          format: uuid
+        bulan:
+          type: integer
+        kategori:
+          type: string
+        jenis_dokumen:
+          type: string
+        file_hash_sha256:
+          type: string
+        original_name:
+          type: string
+        mime_type:
+          type: string
+        file_size_bytes:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
 security:
   - cookieAuth: []
 
 paths:
   /healthz:
     get:
+      operationId: getHealthz
       summary: Health check endpoint
       security: []
       responses:
@@ -28,8 +73,227 @@ paths:
           description: OK
   /readyz:
     get:
+      operationId: getReadyz
       summary: Readiness check endpoint (checks DB)
       security: []
       responses:
         '200':
           description: OK
+  /sakti/import:
+    post:
+      operationId: importSaktiData
+      summary: Import SAKTI data from Excel/CSV
+      tags: [SAKTI]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                tahun_anggaran:
+                  type: integer
+              required:
+                - file
+                - tahun_anggaran
+      responses:
+        '200':
+          description: Import successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaktiImportResult'
+        '400':
+          description: Bad request
+  /sakti/tree:
+    get:
+      operationId: getSaktiTree
+      summary: Get SAKTI hierarchy tree
+      tags: [SAKTI]
+      parameters:
+        - name: tahun
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: SAKTI tree data
+  /documents:
+    post:
+      operationId: uploadDocument
+      summary: Upload a document with CAS deduplication
+      tags: [Documents]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                paket_id:
+                  type: string
+                  format: uuid
+                bulan:
+                  type: integer
+                kategori:
+                  type: string
+                  enum: [KEUANGAN, FISIK]
+                jenis_dokumen:
+                  type: string
+              required:
+                - file
+                - paket_id
+                - bulan
+                - kategori
+                - jenis_dokumen
+      responses:
+        '201':
+          description: Document uploaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentMeta'
+        '409':
+          description: Document with same hash already exists
+  /documents/{id}:
+    get:
+      operationId: downloadDocument
+      summary: Download a document by ID
+      tags: [Documents]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: File content
+        '404':
+          description: Not found
+  /paket:
+    get:
+      operationId: listPaket
+      summary: List all paket pekerjaan
+      tags: [Paket]
+      responses:
+        '200':
+          description: List of paket
+    post:
+      operationId: createPaket
+      summary: Create a new paket pekerjaan
+      tags: [Paket]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nama_paket:
+                  type: string
+                kasatker:
+                  type: string
+                lokasi:
+                  type: string
+                pagu_paket:
+                  type: number
+                akun_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                targets:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      bulan:
+                        type: integer
+                      persen_keuangan:
+                        type: number
+                      persen_fisik:
+                        type: number
+              required:
+                - nama_paket
+                - kasatker
+                - lokasi
+                - pagu_paket
+      responses:
+        '201':
+          description: Paket created
+  /paket/{id}:
+    get:
+      operationId: getPaket
+      summary: Get paket by ID
+      tags: [Paket]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Paket detail
+        '404':
+          description: Not found
+  /paket/{id}/realisasi:
+    put:
+      operationId: updateRealisasiFisik
+      summary: Update monthly physical realization
+      tags: [Paket]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                bulan:
+                  type: integer
+                persen_aktual:
+                  type: number
+                catatan_kendala:
+                  type: string
+              required:
+                - bulan
+                - persen_aktual
+      responses:
+        '200':
+          description: Realisasi updated
+  /paket/{id}/documents:
+    get:
+      operationId: getDocumentsByPaket
+      summary: Get documents for a paket
+      tags: [Documents]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: bulan
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of documents
