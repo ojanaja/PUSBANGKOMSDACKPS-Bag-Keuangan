@@ -32,6 +32,53 @@ components:
         sp2d_inserted:
           type: integer
 
+    ManualAnggaranRequest:
+      type: object
+      properties:
+        tahun_anggaran:
+          type: integer
+        program_kode:
+          type: string
+        program_uraian:
+          type: string
+        kegiatan_kode:
+          type: string
+        kegiatan_uraian:
+          type: string
+        output_kode:
+          type: string
+        output_uraian:
+          type: string
+        suboutput_kode:
+          type: string
+        suboutput_uraian:
+          type: string
+        akun_kode:
+          type: string
+        akun_uraian:
+          type: string
+        pagu:
+          type: number
+        realisasi:
+          type: number
+        sisa:
+          type: number
+      required:
+        - tahun_anggaran
+        - program_kode
+        - program_uraian
+        - kegiatan_kode
+        - kegiatan_uraian
+        - output_kode
+        - output_uraian
+        - suboutput_kode
+        - suboutput_uraian
+        - akun_kode
+        - akun_uraian
+        - pagu
+        - realisasi
+        - sisa
+
     DocumentMeta:
       type: object
       properties:
@@ -58,6 +105,186 @@ components:
         created_at:
           type: string
           format: date-time
+
+    DashboardChartItem:
+      type: object
+      properties:
+        bulan:
+          type: integer
+        rencana_keuangan:
+          type: number
+        realisasi_keuangan:
+          type: number
+        rencana_fisik:
+          type: number
+        realisasi_fisik:
+          type: number
+
+    DashboardDrilldownItem:
+      type: object
+      properties:
+        paket_id:
+          type: string
+          format: uuid
+        nama_paket:
+          type: string
+        pagu_paket:
+          type: number
+        realisasi_keuangan:
+          type: number
+        realisasi_fisik:
+          type: number
+        dokumen:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentMeta'
+
+    NotificationItem:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        detail:
+          type: string
+        time:
+          type: string
+        type:
+          type: string
+          enum: [critical, warning, info]
+        paket_id:
+          type: string
+          format: uuid
+
+    DashboardEWSItem:
+      type: object
+      properties:
+        paket_id:
+          type: string
+          format: uuid
+        nama_paket:
+          type: string
+        status:
+          type: string
+          enum: [TIDAK_LENGKAP, PERINGATAN, LENGKAP]
+        alasan:
+          type: string
+        deviasi_fisik:
+          type: number
+        realisasi_keuangan_persen:
+          type: number
+        realisasi_fisik_persen:
+          type: number
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        full_name:
+          type: string
+        role:
+          type: string
+          enum: [SUPER_ADMIN, ADMIN_KEUANGAN, PPK, PENGAWAS]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateUserRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        full_name:
+          type: string
+        role:
+          type: string
+          enum: [SUPER_ADMIN, ADMIN_KEUANGAN, PPK, PENGAWAS]
+      required: [username, password, full_name, role]
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        full_name:
+          type: string
+        role:
+          type: string
+          enum: [SUPER_ADMIN, ADMIN_KEUANGAN, PPK, PENGAWAS]
+        password:
+          type: string
+
+    UpdatePaketRequest:
+      type: object
+      properties:
+        nama_paket:
+          type: string
+        kasatker:
+          type: string
+        lokasi:
+          type: string
+        pagu_paket:
+          type: number
+      required: [nama_paket, kasatker, lokasi, pagu_paket]
+
+    ActivityLog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        user_full_name:
+          type: string
+        user_username:
+          type: string
+        action:
+          type: string
+        target_type:
+          type: string
+        target_id:
+          type: string
+          format: uuid
+        details:
+          type: object
+          additionalProperties: true
+        ip_address:
+          type: string
+        user_agent:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    AuditLogResponse:
+      type: object
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActivityLog'
+        total:
+          type: integer
+
+    VerificationRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [APPROVED, REJECTED]
+        rejection_reason:
+          type: string
+      required: [status]
 
 security:
   - cookieAuth: []
@@ -106,6 +333,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AnggaranImportResult'
+        '400':
+          description: Bad request
+  /anggaran/manual:
+    post:
+      operationId: createManualAnggaran
+      summary: Manually create a single row hierarchical Anggaran (DIPA)
+      tags: [Anggaran]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManualAnggaranRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
         '400':
           description: Bad request
   /anggaran/tree:
@@ -184,6 +434,12 @@ paths:
       operationId: listPaket
       summary: List all paket pekerjaan
       tags: [Paket]
+      parameters:
+        - name: tahun
+          in: query
+          required: false
+          schema:
+            type: integer
       responses:
         '200':
           description: List of paket
@@ -247,6 +503,67 @@ paths:
           description: Paket detail
         '404':
           description: Not found
+    put:
+      operationId: updatePaket
+      summary: Update a paket pekerjaan by ID
+      tags: [Paket]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nama_paket:
+                  type: string
+                kasatker:
+                  type: string
+                lokasi:
+                  type: string
+                pagu_paket:
+                  type: number
+      responses:
+        '200':
+          description: Paket updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '404':
+          description: Paket not found
+    delete:
+      operationId: deletePaket
+      summary: Delete a paket pekerjaan by ID
+      tags: [Paket]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Paket deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '404':
+          description: Paket not found
   /paket/{id}/realisasi:
     put:
       operationId: updateRealisasiFisik
@@ -297,3 +614,241 @@ paths:
       responses:
         '200':
           description: List of documents
+  /dashboard/chart:
+    get:
+      operationId: getDashboardChart
+      summary: Get aggregated metrics for 12 months chart
+      tags: [Dashboard]
+      parameters:
+        - name: tahun
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of 12 months chart data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DashboardChartItem'
+  /dashboard/drilldown:
+    get:
+      operationId: getDashboardDrilldown
+      summary: Get drilldown details by month
+      tags: [Dashboard]
+      parameters:
+        - name: bulan
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of packages and documents for the selected month
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DashboardDrilldownItem'
+  /dashboard/notifications:
+    get:
+      operationId: getDashboardNotifications
+      summary: Get real-time alerts and notifications for EWS
+      tags: [Dashboard]
+      responses:
+        '200':
+          description: List of active notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NotificationItem'
+
+  /dashboard/ews:
+    get:
+      operationId: getDashboardEWS
+      summary: Get detailed EWS risk analysis for all packages
+      tags: [Dashboard]
+      parameters:
+        - name: tahun
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of package risks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DashboardEWSItem'
+
+  /paket/export:
+    get:
+      operationId: exportPaketExcel
+      summary: Export package compliance data to Excel
+      tags: [Paket]
+      parameters:
+        - name: tahun
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Excel file
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+
+  /users:
+    get:
+      operationId: listUsers
+      summary: List all users
+      tags: [Users]
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+    post:
+      operationId: createUser
+      summary: Create a new user
+      tags: [Users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+  /users/{id}:
+    put:
+      operationId: updateUser
+      summary: Update a user
+      tags: [Users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+    delete:
+      operationId: deleteUser
+      summary: Delete a user
+      tags: [Users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: User deleted
+
+  /audit-logs:
+    get:
+      operationId: listAuditLogs
+      summary: List activity records (Super Admin only)
+      tags: [Admin]
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of audit logs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogResponse'
+
+  /verification/realisasi/{id}:
+    post:
+      operationId: verifyRealisasiFisik
+      summary: Approve or reject a physical realization record
+      tags: [Verification]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerificationRequest'
+      responses:
+        '200':
+          description: Verification recorded
+        '403':
+          description: Forbidden - Insufficient permissions
+
+  /verification/document/{id}:
+    post:
+      operationId: verifyDocument
+      summary: Approve or reject a document
+      tags: [Verification]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerificationRequest'
+      responses:
+        '200':
+          description: Verification recorded
+        '403':
+          description: Forbidden - Insufficient permissions

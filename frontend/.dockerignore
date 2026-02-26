@@ -1,0 +1,24 @@
+# Git
+.git
+.gitignore
+
+# NPM packages (let container install its own)
+node_modules/
+# package-lock.json (Keep this! Needed for caching)
+
+# Build output
+dist/
+build/
+coverage/
+
+# Environment files
+.env
+.env.*
+
+# Logs
+npm-debug.log
+yarn-error.log
+
+# Editor directories
+.idea/
+.vscode/

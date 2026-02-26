@@ -1,0 +1,23 @@
+# Git
+.git
+.gitignore
+
+# Go build artifacts
+bin/
+api
+main
+*.exe
+*.test
+*.out
+
+# Environment files
+.env
+.env.*
+
+# Editor directories
+.idea/
+.vscode/
+
+# Local storage (if mounted)
+storage/
+tmp/

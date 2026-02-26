@@ -39,9 +39,14 @@ services:
       dockerfile: Dockerfile
     container_name: keuangan-backend
     environment:
-      - DB_URL=postgres://siap_admin:siap_password@postgres:5432/siap_bpk?sslmode=disable
+      - DB_URL=postgres://siap_admin:siap_password@db:5432/siap_bpk?sslmode=disable
+      - JWT_SECRET=keuangan-pusbangkom-jwt-secret-2026
+      - CAS_PATH=/app/storage/cas
     ports:
       - "8080:8080"
+    volumes:
+      - backend_storage:/app/storage
+      - kas_storage:/mnt/nas_data # Simulating NAS storage bind mount
     depends_on:
       db:
         condition: service_started
@@ -50,9 +55,25 @@ services:
         limits:
           cpus: "1.5"
           memory: "1G"
+
+  # 4. Frontend Dev Server
+  frontend-dev:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: keuangan-frontend
+    ports:
+      - "5173:5173"
     volumes:
-      - kas_storage:/mnt/nas_data # Simulating NAS storage bind mount
+      - ./frontend:/app
+      - /app/node_modules # Anonymous volume to keep container's node_modules separate
+    command: sh -c "npm install && npm run dev -- --host"
+    depends_on:
+      - backend
+    environment:
+      - VITE_API_URL=http://backend:8080
 
 volumes:
   db_data:
   kas_storage:
+  backend_storage:
