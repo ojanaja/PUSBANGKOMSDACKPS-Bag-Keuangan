@@ -13,3 +13,22 @@ WHERE username = $1 LIMIT 1;
 -- name: GetUser :one
 SELECT * FROM users
 WHERE id = $1 LIMIT 1;
+
+-- name: ListUsers :many
+SELECT id, username, full_name, role, created_at, updated_at
+FROM users
+ORDER BY created_at DESC;
+
+-- name: UpdateUser :one
+UPDATE users
+SET 
+  full_name = sqlc.arg('full_name'),
+  role = sqlc.arg('role'),
+  password_hash = sqlc.arg('password_hash'),
+  updated_at = NOW()
+WHERE id = $1
+RETURNING *;
+
+-- name: DeleteUser :exec
+DELETE FROM users
+WHERE id = $1;

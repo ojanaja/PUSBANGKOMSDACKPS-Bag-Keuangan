@@ -1,0 +1,1 @@
+ALTER TABLE dokumen_bukti DROP CONSTRAINT dokumen_bukti_file_hash_sha256_key;
