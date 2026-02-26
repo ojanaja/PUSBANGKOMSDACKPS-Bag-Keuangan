@@ -1,113 +1,255 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useParams, Link } from 'react-router-dom'
 import {
-    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { X, Download, FileText } from 'lucide-react'
+import { X, FileText, AlertCircle, ChevronLeft, Printer } from 'lucide-react'
+import PageHeader from '@/shared/ui/PageHeader'
+import AppLoader from '@/shared/ui/AppLoader'
+import AppTextButton from '@/shared/ui/AppTextButton'
 
-const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+const monthsLong = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+const monthsShort = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
 
-const chartData = months.map((m, i) => ({
-    bulan: m,
-    rencanaKeu: Math.min(100, (i + 1) * 8.33),
-    realisasiKeu: i < 8 ? Math.min(100, (i + 1) * 7.5 + Math.random() * 5) : null,
-    rencanaFisik: Math.min(100, (i + 1) * 8.33),
-    realisasiFisik: i < 8 ? Math.min(100, (i + 1) * 6.0 + Math.random() * 8) : null,
-}))
+interface PaketDetail {
+    ID: string
+    NamaPaket: string
+    Kasatker: string
+}
 
-// Mock SP2D drill-down data
-const mockSP2D = [
-    { nomor: 'SP2D-00456/2026', tanggal: '15 Agu 2026', nilai: 125_000_000, keterangan: 'Pembayaran Tahap II' },
-    { nomor: 'SP2D-00457/2026', tanggal: '22 Agu 2026', nilai: 75_000_000, keterangan: 'Belanja Bahan Pelatihan' },
-]
+interface Target {
+    Bulan: number
+    PersenKeuangan: number
+    PersenFisik: number
+}
 
-const mockDokumen = [
-    { name: 'Kwitansi_Aug_Payment.pdf', size: '320 KB' },
-    { name: 'BAST_Tahap_II.pdf', size: '1.1 MB' },
-    { name: 'Foto_Progress_50persen.jpg', size: '2.4 MB' },
-]
-
-function formatCurrency(v: number) {
-    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(v)
+interface RealisasiFisik {
+    Bulan: number
+    PersenAktual: number
+    CatatanKendala: string
 }
 
 export default function KurvaSPage() {
+    const { id } = useParams()
+    const tahun = new Date().getFullYear()
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
+    const [paket, setPaket] = useState<PaketDetail | null>(null)
+    const [chartData, setChartData] = useState<any[]>([])
     const [drawerOpen, setDrawerOpen] = useState(false)
-    const [selectedMonth, setSelectedMonth] = useState('')
+    const [selectedMonth, setSelectedMonth] = useState<number | null>(null)
 
-    const handleChartClick = (data: { activeLabel?: string }) => {
-        if (data?.activeLabel) {
-            setSelectedMonth(data.activeLabel)
+    useEffect(() => {
+        if (id) fetchDetail()
+    }, [id])
+
+    const fetchDetail = async () => {
+        setLoading(true)
+        try {
+            const res = await fetch(`/api/v1/paket/${id}`, { credentials: 'include' })
+            if (!res.ok) throw new Error('Paket tidak ditemukan')
+            const data = await res.json()
+
+            setPaket(data.paket || data)
+
+            const targets: Target[] = data.targets || []
+            const realisasi: RealisasiFisik[] = data.realisasi || []
+
+            let cumRencanaKeu = 0
+            let cumRencanaFis = 0
+            let cumRealFis = 0
+
+            const processed = monthsShort.map((m, i) => {
+                const monthNum = i + 1
+                const t = targets.find(target => target.Bulan === monthNum)
+                const r = realisasi.find(real => real.Bulan === monthNum)
+
+                cumRencanaKeu += t ? Number(t.PersenKeuangan) : 0
+                cumRencanaFis += t ? Number(t.PersenFisik) : 0
+
+                const hasData = r && (r.PersenAktual > 0 || r.CatatanKendala)
+                if (hasData || monthNum <= new Date().getMonth() + 1) {
+                    cumRealFis += r ? Number(r.PersenAktual) : 0
+                }
+
+                const isFuture = monthNum > new Date().getMonth() + 1 && !hasData
+
+                return {
+                    bulan: m,
+                    bulanFull: monthsLong[i],
+                    rencanaKeu: Math.min(100, cumRencanaKeu),
+                    rencanaFisik: Math.min(100, cumRencanaFis),
+                    realisasiFisik: isFuture ? null : Math.min(100, cumRealFis),
+                    kendala: r?.CatatanKendala || ''
+                }
+            })
+
+            setChartData(processed)
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Terjadi kesalahan')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleChartClick = (data: any) => {
+        if (data?.activePayload?.[0]?.payload) {
+            const payload = data.activePayload[0].payload
+            const mIndex = monthsShort.indexOf(payload.bulan)
+            setSelectedMonth(mIndex)
             setDrawerOpen(true)
         }
     }
 
+    if (loading) return <AppLoader label="Menghitung proyeksi kurva-S..." />
+
+    if (error || !paket) return (
+        <div className="flex flex-col items-center justify-center py-40 gap-4 text-center">
+            <AlertCircle size={48} className="text-red-400" />
+            <p className="text-slate-800 font-bold text-xl">{error || 'Data tidak tersedia'}</p>
+            <Link to="/progres-satker" className="text-primary-600 font-medium hover:underline">Kembali ke Daftar Paket</Link>
+        </div>
+    )
+
     return (
         <div className="space-y-6">
-            <div>
-                <h1 className="text-2xl font-bold text-slate-900">Kurva-S Proyek</h1>
-                <p className="text-sm text-slate-500 mt-1">Pengadaan Alat Praktik Lab Komputer</p>
+            <div className="flex items-center gap-4">
+                <Link to="/progres-satker" className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors">
+                    <ChevronLeft size={24} />
+                </Link>
+                <div className="flex-1">
+                    <PageHeader
+                        title="Visualisasi Kurva-S"
+                        description={`${paket.NamaPaket} • ${paket.Kasatker}`}
+                        actions={(
+                            <div className="no-print">
+                                <AppTextButton label="Cetak Kurva S" icon={<Printer size={16} />} onClick={() => window.print()} />
+                            </div>
+                        )}
+                    />
+                </div>
             </div>
 
-            {/* Chart Component */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-                <h2 className="text-lg font-semibold text-slate-800 mb-4">Visualisasi Kurva-S</h2>
-                <ResponsiveContainer width="100%" height={400}>
-                    <LineChart data={chartData} onClick={handleChartClick as any}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                        <XAxis dataKey="bulan" tick={{ fontSize: 12 }} stroke="#94a3b8" />
-                        <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} stroke="#94a3b8" unit="%" />
-                        <Tooltip
-                            formatter={(value: number | undefined) => value ? `${value.toFixed(1)}%` : '0%'}
-                            contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px' }}
-                        />
-                        <Legend
-                            wrapperStyle={{ fontSize: '12px', paddingTop: '16px' }}
-                            onClick={() => { }}
-                        />
-                        <Line type="monotone" dataKey="rencanaKeu" name="Rencana Keuangan" stroke="#6366f1" strokeDasharray="8 4" strokeWidth={2} dot={false} />
-                        <Line type="monotone" dataKey="realisasiKeu" name="Realisasi Keuangan" stroke="#6366f1" strokeWidth={2.5} dot={{ r: 4, cursor: 'pointer' }} activeDot={{ r: 6 }} connectNulls={false} />
-                        <Line type="monotone" dataKey="rencanaFisik" name="Rencana Fisik" stroke="#22c55e" strokeDasharray="8 4" strokeWidth={2} dot={false} />
-                        <Line type="monotone" dataKey="realisasiFisik" name="Realisasi Fisik" stroke="#22c55e" strokeWidth={2.5} dot={{ r: 4, cursor: 'pointer' }} activeDot={{ r: 6 }} connectNulls={false} />
-                    </LineChart>
-                </ResponsiveContainer>
-                <p className="text-xs text-slate-400 mt-2 text-center">Klik titik pada grafik untuk melihat rincian transaksi & bukti bulan tersebut</p>
+            <style>{`
+                @media print {
+                    .no-print { display: none !important; }
+                    body { background: white !important; }
+                    .p-8 { padding: 0 !important; }
+                    .bg-white { border: 1px solid #e2e8f0 !important; box-shadow: none !important; }
+                    .rounded-2xl { border-radius: 0.5rem !important; }
+                    .shadow-sm { box-shadow: none !important; }
+                    .h-[450px] { height: 500px !important; }
+                    table { page-break-inside: auto; }
+                    tr { page-break-inside: avoid; page-break-after: auto; }
+                }
+            `}</style>
+
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8">
+                <div className="flex items-center justify-between mb-8">
+                    <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                        <div className="w-1.5 h-6 bg-indigo-500 rounded-full" />
+                        Grafik Kemajuan Kumulatif (%)
+                    </h2>
+                    <div className="flex items-center gap-6">
+                        {[
+                            { label: 'Rencana Fisik', color: '#22c55e', dashed: true },
+                            { label: 'Realisasi Fisik', color: '#22c55e', dashed: false },
+                            { label: 'Rencana Keuangan', color: '#6366f1', dashed: true },
+                        ].map(l => (
+                            <div key={l.label} className="flex items-center gap-2">
+                                <div className={`w-8 h-0.5 ${l.dashed ? 'border-t-2 border-dashed' : 'bg-current'}`} style={{ color: l.color, backgroundColor: l.dashed ? 'transparent' : l.color }} />
+                                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{l.label}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="h-112.5 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={chartData} onClick={handleChartClick}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                            <XAxis
+                                dataKey="bulan"
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{ fontSize: 12, fontWeight: 600, fill: '#94a3b8' }}
+                                dy={10}
+                            />
+                            <YAxis
+                                domain={[0, 100]}
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{ fontSize: 12, fontWeight: 600, fill: '#94a3b8' }}
+                                unit="%"
+                            />
+                            <Tooltip
+                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', padding: '12px' }}
+                                labelStyle={{ fontWeight: 800, color: '#1e293b', marginBottom: '8px' }}
+                                formatter={(value: number | undefined) => [value !== undefined ? `${value.toFixed(1)}%` : '-', '']}
+                            />
+                            <Line
+                                type="monotone"
+                                dataKey="rencanaKeu"
+                                stroke="#6366f1"
+                                strokeDasharray="6 4"
+                                strokeWidth={2}
+                                dot={false}
+                                activeDot={{ r: 4 }}
+                            />
+                            <Line
+                                type="monotone"
+                                dataKey="rencanaFisik"
+                                stroke="#22c55e"
+                                strokeDasharray="6 4"
+                                strokeWidth={2}
+                                dot={false}
+                                activeDot={{ r: 4 }}
+                            />
+                            <Line
+                                type="monotone"
+                                dataKey="realisasiFisik"
+                                stroke="#22c55e"
+                                strokeWidth={4}
+                                dot={{ r: 6, strokeWidth: 2, fill: '#fff' }}
+                                activeDot={{ r: 8, strokeWidth: 0 }}
+                                connectNulls
+                            />
+                        </LineChart>
+                    </ResponsiveContainer>
+                </div>
+                <p className="text-center text-xs text-slate-400 mt-6 font-medium italic">
+                    * Klik pada titik grafik untuk melihat rincian kendala dan dokumen pada bulan tersebut
+                </p>
             </div>
 
-            {/* Deviation Table */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-100">
-                    <h2 className="text-lg font-semibold text-slate-800">Rekap Deviasi</h2>
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                    <h2 className="text-lg font-bold text-slate-800">Tabel Deviasi Kumulatif</h2>
+                    <span className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-500 uppercase tracking-widest shadow-sm">TA {tahun}</span>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                         <thead>
-                            <tr className="bg-slate-50 text-slate-500 font-medium">
-                                <th className="px-4 py-3 text-left">Bulan</th>
-                                <th className="px-4 py-3 text-center">Rencana Keu.</th>
-                                <th className="px-4 py-3 text-center">Realisasi Keu.</th>
-                                <th className="px-4 py-3 text-center">Deviasi Keu.</th>
-                                <th className="px-4 py-3 text-center">Rencana Fisik</th>
-                                <th className="px-4 py-3 text-center">Realisasi Fisik</th>
-                                <th className="px-4 py-3 text-center">Deviasi Fisik</th>
+                            <tr className="bg-white text-slate-400 font-bold uppercase tracking-wider text-[10px] border-b border-slate-100">
+                                <th className="px-6 py-4 text-left">Bulan</th>
+                                <th className="px-6 py-4 text-center">Rencana Fisik</th>
+                                <th className="px-6 py-4 text-center">Realisasi Fisik</th>
+                                <th className="px-6 py-4 text-center">Deviasi Fisik</th>
+                                <th className="px-6 py-4 text-center">Rencana Keu.</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
+                        <tbody className="divide-y divide-slate-50">
                             {chartData.map((d) => {
-                                const devKeu = d.realisasiKeu !== null ? d.realisasiKeu - d.rencanaKeu : null
                                 const devFis = d.realisasiFisik !== null ? d.realisasiFisik - d.rencanaFisik : null
                                 return (
-                                    <tr key={d.bulan} className="hover:bg-slate-50">
-                                        <td className="px-4 py-2 font-medium text-slate-700">{d.bulan}</td>
-                                        <td className="px-4 py-2 text-center tabular-nums">{d.rencanaKeu.toFixed(1)}%</td>
-                                        <td className="px-4 py-2 text-center tabular-nums">{d.realisasiKeu?.toFixed(1) ?? '-'}%</td>
-                                        <td className={`px-4 py-2 text-center tabular-nums font-semibold ${devKeu !== null && devKeu < 0 ? 'text-red-600' : 'text-slate-600'}`}>
-                                            {devKeu !== null ? `${devKeu > 0 ? '+' : ''}${devKeu.toFixed(1)}%` : '-'}
+                                    <tr key={d.bulan} className="hover:bg-slate-50/50 transition-colors">
+                                        <td className="px-6 py-4 font-bold text-slate-700">{d.bulanFull}</td>
+                                        <td className="px-6 py-4 text-center font-medium text-slate-500">{d.rencanaFisik.toFixed(1)}%</td>
+                                        <td className="px-6 py-4 text-center font-bold text-slate-800">{d.realisasiFisik !== null ? `${d.realisasiFisik.toFixed(1)}%` : '-'}</td>
+                                        <td className={`px-6 py-4 text-center font-bold ${devFis !== null && devFis < 0 ? 'text-red-500' : devFis !== null ? 'text-emerald-500' : 'text-slate-300'}`}>
+                                            {devFis !== null ? `${devFis >= 0 ? '+' : ''}${devFis.toFixed(1)}%` : '-'}
                                         </td>
-                                        <td className="px-4 py-2 text-center tabular-nums">{d.rencanaFisik.toFixed(1)}%</td>
-                                        <td className="px-4 py-2 text-center tabular-nums">{d.realisasiFisik?.toFixed(1) ?? '-'}%</td>
-                                        <td className={`px-4 py-2 text-center tabular-nums font-semibold ${devFis !== null && devFis < 0 ? 'text-red-600' : 'text-slate-600'}`}>
-                                            {devFis !== null ? `${devFis > 0 ? '+' : ''}${devFis.toFixed(1)}%` : '-'}
-                                        </td>
+                                        <td className="px-6 py-4 text-center font-medium text-slate-500">{d.rencanaKeu.toFixed(1)}%</td>
                                     </tr>
                                 )
                             })}
@@ -116,60 +258,33 @@ export default function KurvaSPage() {
                 </div>
             </div>
 
-            {/* Right Drawer (Drill-Down) */}
-            {drawerOpen && (
+            {drawerOpen && selectedMonth !== null && (
                 <>
-                    <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setDrawerOpen(false)} />
-                    <div className="fixed top-0 right-0 h-full w-full max-w-[40%] min-w-[360px] bg-white shadow-2xl z-50 flex flex-col animate-in slide-in-from-right-full duration-300">
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-                            <h3 className="text-lg font-bold text-slate-900">
-                                Rincian Transaksi & Bukti - {selectedMonth} 2026
-                            </h3>
-                            <button onClick={() => setDrawerOpen(false)} className="p-1 rounded-lg hover:bg-slate-100">
-                                <X size={20} className="text-slate-400" />
+                    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 transition-opacity" onClick={() => setDrawerOpen(false)} />
+                    <div className="fixed top-0 right-0 h-full w-full max-w-112.5 bg-white shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
+                        <div className="flex items-center justify-between px-8 py-6 border-b border-slate-100 bg-slate-50/50">
+                            <div>
+                                <h3 className="text-xl font-bold text-slate-900">Rincian Laporan</h3>
+                                <p className="text-sm text-slate-500 mt-0.5">{chartData[selectedMonth].bulanFull} {tahun}</p>
+                            </div>
+                            <button onClick={() => setDrawerOpen(false)} className="p-2 rounded-xl hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-200 transition-all text-slate-400">
+                                <X size={20} />
                             </button>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                            {/* SP2D Table */}
-                            <div>
-                                <h4 className="text-sm font-semibold text-slate-700 mb-3">Rincian SP2D Cair</h4>
-                                <table className="w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
-                                    <thead>
-                                        <tr className="bg-slate-50 text-left text-slate-500 font-medium">
-                                            <th className="px-4 py-2">No. SP2D</th>
-                                            <th className="px-4 py-2">Tanggal</th>
-                                            <th className="px-4 py-2 text-right">Nilai</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {mockSP2D.map((sp) => (
-                                            <tr key={sp.nomor}>
-                                                <td className="px-4 py-2 font-mono text-xs text-primary-600">{sp.nomor}</td>
-                                                <td className="px-4 py-2 text-slate-600">{sp.tanggal}</td>
-                                                <td className="px-4 py-2 text-right tabular-nums font-medium">{formatCurrency(sp.nilai)}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                        <div className="flex-1 overflow-y-auto p-8 space-y-8">
+                            <div className="space-y-4">
+                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Analisis Progres & Kendala</h4>
+                                <div className={`p-5 rounded-2xl border ${chartData[selectedMonth].kendala ? 'bg-amber-50 border-amber-100 text-amber-900' : 'bg-slate-50 border-slate-100 text-slate-500 italic text-sm'}`}>
+                                    {chartData[selectedMonth].kendala || 'Tidak ada catatan kendala dilaporkan pada bulan ini.'}
+                                </div>
                             </div>
 
-                            {/* Document Cards */}
-                            <div>
-                                <h4 className="text-sm font-semibold text-slate-700 mb-3">Dokumen Bukti</h4>
-                                <div className="space-y-2">
-                                    {mockDokumen.map((doc) => (
-                                        <div key={doc.name} className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
-                                            <FileText size={28} className="text-red-500 flex-shrink-0" />
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-medium text-slate-700 truncate">{doc.name}</p>
-                                                <p className="text-xs text-slate-400">{doc.size}</p>
-                                            </div>
-                                            <button className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary-50 text-primary-700 rounded-lg text-xs font-medium hover:bg-primary-100 transition-colors">
-                                                <Download size={14} />
-                                                Unduh
-                                            </button>
-                                        </div>
-                                    ))}
+                            <div className="space-y-4">
+                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Dokumen Bukti Pendukung</h4>
+                                <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                                    <FileText size={40} className="text-slate-200 mx-auto mb-3" />
+                                    <p className="text-sm text-slate-400 font-medium">Dokumen sedang disinkronisasi...</p>
+                                    <Link to={`/progres/${id}`} className="mt-4 inline-flex text-xs font-bold text-primary-600 uppercase tracking-widest hover:underline">Kelola Dokumen Di Sini</Link>
                                 </div>
                             </div>
                         </div>
