@@ -3,15 +3,15 @@ import {
     LayoutDashboard,
     Database,
     FolderKanban,
-    ClipboardList,
-    LineChart,
     ShieldAlert,
     ChevronLeft,
     ChevronRight,
     Users,
+    History,
 } from 'lucide-react'
 import { useAuthStore, type UserRole } from '@/stores/authStore'
 import { useSidebarStore } from '@/stores/sidebarStore'
+import { IconButton } from '@mui/material'
 
 interface NavItem {
     label: string
@@ -22,10 +22,10 @@ interface NavItem {
 
 const navItems: NavItem[] = [
     {
-        label: 'Dashboard',
+        label: 'Beranda',
         path: '/',
         icon: <LayoutDashboard size={20} />,
-        roles: ['SUPER_ADMIN', 'ADMIN_KEUANGAN', 'PPK', 'AUDITOR'],
+        roles: ['SUPER_ADMIN', 'ADMIN_KEUANGAN', 'PPK', 'PENGAWAS'],
     },
     {
         label: 'Integrasi Anggaran',
@@ -34,33 +34,27 @@ const navItems: NavItem[] = [
         roles: ['SUPER_ADMIN', 'ADMIN_KEUANGAN'],
     },
     {
-        label: 'Paket Pekerjaan',
-        path: '/paket',
+        label: 'Progres Satker',
+        path: '/progres-satker',
         icon: <FolderKanban size={20} />,
-        roles: ['SUPER_ADMIN', 'PPK', 'ADMIN_KEUANGAN'],
+        roles: ['SUPER_ADMIN', 'PPK', 'ADMIN_KEUANGAN', 'PENGAWAS'],
     },
     {
-        label: 'Progres & Dokumen',
-        path: '/progres',
-        icon: <ClipboardList size={20} />,
-        roles: ['SUPER_ADMIN', 'PPK'],
-    },
-    {
-        label: 'Kurva-S',
-        path: '/kurva-s',
-        icon: <LineChart size={20} />,
-        roles: ['SUPER_ADMIN', 'ADMIN_KEUANGAN', 'PPK', 'AUDITOR'],
-    },
-    {
-        label: 'EWS',
+        label: 'Sistem Peringatan Dini',
         path: '/ews',
         icon: <ShieldAlert size={20} />,
         roles: ['SUPER_ADMIN', 'PPK', 'ADMIN_KEUANGAN'],
     },
     {
-        label: 'Manajemen User',
+        label: 'Manajemen Pengguna',
         path: '/users',
         icon: <Users size={20} />,
+        roles: ['SUPER_ADMIN'],
+    },
+    {
+        label: 'Jejak Audit',
+        path: '/audit-trail',
+        icon: <History size={20} />,
         roles: ['SUPER_ADMIN'],
     },
 ]
@@ -69,16 +63,13 @@ export default function Sidebar() {
     const user = useAuthStore((s) => s.user)
     const { isCollapsed, toggle } = useSidebarStore()
 
-    const filteredNav = navItems.filter((item) =>
-        user ? item.roles.includes(user.role) : false
-    )
+    const filteredNav = navItems.filter((item) => (user ? item.roles.includes(user.Role) : false))
 
     return (
         <aside
             className={`fixed top-0 left-0 h-screen bg-sidebar text-white flex flex-col transition-all duration-300 z-40 ${isCollapsed ? 'w-[72px]' : 'w-[250px]'
                 }`}
         >
-            {/* Brand */}
             <div className="flex items-center h-[60px] px-4 border-b border-white/10">
                 <div
                     className={`w-10 h-10 rounded-lg bg-indigo-500 flex items-center justify-center text-white font-bold shrink-0 transition-opacity ${isCollapsed ? 'opacity-100' : ''
@@ -93,7 +84,6 @@ export default function Sidebar() {
                 )}
             </div>
 
-            {/* Navigation */}
             <nav className="flex-1 py-4 overflow-y-auto">
                 <ul className="space-y-1 px-2">
                     {filteredNav.map((item) => (
@@ -110,22 +100,18 @@ export default function Sidebar() {
                                 title={isCollapsed ? item.label : undefined}
                             >
                                 <span className="flex-shrink-0">{item.icon}</span>
-                                {!isCollapsed && (
-                                    <span className="truncate">{item.label}</span>
-                                )}
+                                {!isCollapsed && <span className="truncate">{item.label}</span>}
                             </NavLink>
                         </li>
                     ))}
                 </ul>
             </nav>
 
-            {/* Collapse Toggle */}
-            <button
-                onClick={toggle}
-                className="flex items-center justify-center h-12 border-t border-white/10 text-slate-400 hover:text-white hover:bg-sidebar-hover transition-colors"
-            >
-                {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-            </button>
+            <div className="h-12 border-t border-white/10 flex items-center justify-center">
+                <IconButton size="small" sx={{ color: '#94a3b8' }} onClick={toggle}>
+                    {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+                </IconButton>
+            </div>
         </aside>
     )
 }

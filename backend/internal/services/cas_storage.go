@@ -7,30 +7,119 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 )
 
-// CASStorage manages Content-Addressable Storage for documents.
 type CASStorage struct {
-	BasePath string // e.g., /app/storage/cas
+	BasePath string
 }
 
-// NewCASStorage creates a CAS storage handler.
 func NewCASStorage(basePath string) *CASStorage {
 	os.MkdirAll(basePath, 0755)
 	return &CASStorage{BasePath: basePath}
 }
 
-// SaveResult holds the result of a CAS save operation.
 type SaveResult struct {
 	Hash     string
 	MimeType string
 	Size     int64
 }
 
-// Save hashes the file content with SHA-256 and stores it. If the hash already exists, returns the hash without writing.
+func compressPDF(inputPath string) (string, error) {
+	outputPath := inputPath + ".compressed"
+	cmd := exec.Command("gs",
+		"-sDEVICE=pdfwrite",
+		"-dCompatibilityLevel=1.4",
+		"-dPDFSETTINGS=/ebook",
+		"-dNOPAUSE",
+		"-dQUIET",
+		"-dBATCH",
+		"-sOutputFile="+outputPath,
+		inputPath,
+	)
+
+	if err := cmd.Run(); err != nil {
+		return "", err
+	}
+
+	return outputPath, nil
+}
+
 func (c *CASStorage) Save(r io.Reader) (*SaveResult, error) {
-	// Read into temp file to compute hash
+	tmp, err := os.CreateTemp(c.BasePath, "cas-upload-*")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer os.Remove(tmp.Name())
+
+	_, err = io.Copy(tmp, r)
+	if err != nil {
+		tmp.Close()
+		return nil, fmt.Errorf("failed to write temp file: %w", err)
+	}
+	tmp.Close()
+
+	f, _ := os.Open(tmp.Name())
+	header := make([]byte, 512)
+	n, _ := f.Read(header)
+	f.Close()
+	mimeType := http.DetectContentType(header[:n])
+
+	finalPath := tmp.Name()
+
+	if mimeType == "application/pdf" {
+		compressedPath, err := compressPDF(tmp.Name())
+		if err == nil {
+			infoOrig, _ := os.Stat(tmp.Name())
+			infoComp, _ := os.Stat(compressedPath)
+
+			if infoComp.Size() < infoOrig.Size() {
+			} else {
+			}
+		} else {
+			fmt.Printf("PDF compression failed: %v\n", err)
+		}
+	}
+
+	fFinal, err := os.Open(finalPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open final file: %w", err)
+	}
+	defer fFinal.Close()
+
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, fFinal); err != nil {
+		return nil, fmt.Errorf("failed to hash file: %w", err)
+	}
+
+	hashBytes := hasher.Sum(nil)
+	hashHex := hex.EncodeToString(hashBytes)
+
+	stat, _ := fFinal.Stat()
+	finalSize := stat.Size()
+
+	destPath := filepath.Join(c.BasePath, hashHex)
+	if _, err := os.Stat(destPath); err == nil {
+		return &SaveResult{Hash: hashHex, MimeType: mimeType, Size: finalSize}, nil
+	}
+
+
+	destFile, err := os.Create(destPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create dest file: %w", err)
+	}
+	defer destFile.Close()
+
+	if _, err := io.Copy(destFile, fFinal); err != nil {
+		return nil, fmt.Errorf("failed to copy to dest: %w", err)
+	}
+
+	return &SaveResult{Hash: hashHex, MimeType: mimeType, Size: finalSize}, nil
+}
+
+/* ORIGINAL CODE PRESERVED FOR REFERENCE
+func (c *CASStorage) Save(r io.Reader) (*SaveResult, error) {
 	tmp, err := os.CreateTemp(c.BasePath, "cas-upload-*")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp file: %w", err)
@@ -50,23 +139,18 @@ func (c *CASStorage) Save(r io.Reader) (*SaveResult, error) {
 	hashBytes := hasher.Sum(nil)
 	hashHex := hex.EncodeToString(hashBytes)
 
-	// Detect MIME type from first 512 bytes
 	f, _ := os.Open(tmp.Name())
 	buf := make([]byte, 512)
 	n, _ := f.Read(buf)
 	f.Close()
 	mimeType := http.DetectContentType(buf[:n])
 
-	// Check if file already exists
 	destPath := filepath.Join(c.BasePath, hashHex)
 	if _, err := os.Stat(destPath); err == nil {
-		// Already exists — deduplication
 		return &SaveResult{Hash: hashHex, MimeType: mimeType, Size: size}, nil
 	}
 
-	// Move temp file to final destination
 	if err := os.Rename(tmp.Name(), destPath); err != nil {
-		// Fallback: copy if rename fails (cross-device)
 		src, _ := os.Open(tmp.Name())
 		dst, _ := os.Create(destPath)
 		io.Copy(dst, src)
@@ -76,13 +160,12 @@ func (c *CASStorage) Save(r io.Reader) (*SaveResult, error) {
 
 	return &SaveResult{Hash: hashHex, MimeType: mimeType, Size: size}, nil
 }
+*/
 
-// GetPath returns the full path for a given hash.
 func (c *CASStorage) GetPath(hash string) string {
 	return filepath.Join(c.BasePath, hash)
 }
 
-// Exists checks whether a file with the given hash exists.
 func (c *CASStorage) Exists(hash string) bool {
 	_, err := os.Stat(c.GetPath(hash))
 	return err == nil

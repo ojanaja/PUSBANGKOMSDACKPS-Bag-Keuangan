@@ -9,12 +9,11 @@ import (
 	"github.com/vandal/keuangan-pusbangkom/internal/db"
 )
 
-// EWSAlert represents a single Early Warning System alert.
 type EWSAlert struct {
 	PaketID        pgtype.UUID `json:"paket_id"`
 	NamaPaket      string      `json:"nama_paket"`
 	Bulan          int32       `json:"bulan"`
-	Severity       string      `json:"severity"` // CRITICAL, WARNING, INFO
+	Severity       string      `json:"severity"`
 	Rule           string      `json:"rule"`
 	Message        string      `json:"message"`
 	PersenKeuangan float64     `json:"persen_keuangan"`
@@ -23,17 +22,14 @@ type EWSAlert struct {
 	CreatedAt      time.Time   `json:"created_at"`
 }
 
-// EWSEngine runs rule checks against paket data.
 type EWSEngine struct {
 	queries *db.Queries
 }
 
-// NewEWSEngine creates a new EWS engine instance.
 func NewEWSEngine(q *db.Queries) *EWSEngine {
 	return &EWSEngine{queries: q}
 }
 
-// RunAllChecks executes all EWS rules and returns alerts.
 func (e *EWSEngine) RunAllChecks(ctx context.Context) []EWSAlert {
 	var alerts []EWSAlert
 
@@ -53,17 +49,15 @@ func (e *EWSEngine) RunAllChecks(ctx context.Context) []EWSAlert {
 			continue
 		}
 
-		// Build lookup maps
 		targetMap := make(map[int32]db.PaketTarget)
 		for _, t := range targets {
 			targetMap[t.Bulan] = t
 		}
-		realisasiMap := make(map[int32]db.PaketRealisasiFisik)
+		realisasiMap := make(map[int32]db.GetRealisasiFisikByPaketIDRow)
 		for _, r := range realisasi {
 			realisasiMap[r.Bulan] = r
 		}
 
-		// Check documents per month
 		docs, _ := e.queries.GetDocumentsByPaket(ctx, paket.ID)
 		docsPerBulan := make(map[int32]int)
 		for _, d := range docs {
@@ -76,7 +70,6 @@ func (e *EWSEngine) RunAllChecks(ctx context.Context) []EWSAlert {
 			target, hasTarget := targetMap[bulan]
 			real, hasReal := realisasiMap[bulan]
 
-			// Rule 1: Deviation > 10% between target and actual
 			if hasTarget && hasReal {
 				targetFisik := numericToFloat64(target.PersenFisik)
 				actualFisik := numericToFloat64(real.PersenAktual)
@@ -98,7 +91,6 @@ func (e *EWSEngine) RunAllChecks(ctx context.Context) []EWSAlert {
 				}
 			}
 
-			// Rule 2: Has financial realization but no physical progress
 			if hasTarget {
 				targetKeu := numericToFloat64(target.PersenKeuangan)
 				actualFisik := float64(0)
@@ -120,7 +112,6 @@ func (e *EWSEngine) RunAllChecks(ctx context.Context) []EWSAlert {
 				}
 			}
 
-			// Rule 3: Missing supporting documents
 			if docsPerBulan[bulan] == 0 && (hasTarget || hasReal) {
 				alerts = append(alerts, EWSAlert{
 					PaketID:   paket.ID,
@@ -139,13 +130,11 @@ func (e *EWSEngine) RunAllChecks(ctx context.Context) []EWSAlert {
 	return alerts
 }
 
-// StartCron runs the EWS check periodically.
 func (e *EWSEngine) StartCron(ctx context.Context, interval time.Duration) {
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
-		// Run immediately on startup
 		e.RunAllChecks(ctx)
 
 		for {

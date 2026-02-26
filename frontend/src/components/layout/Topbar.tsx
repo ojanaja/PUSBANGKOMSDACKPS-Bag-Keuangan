@@ -1,41 +1,54 @@
 import { Bell, ChevronRight, LogOut, User } from 'lucide-react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { useSidebarStore } from '@/stores/sidebarStore'
 import { useState, useRef, useEffect } from 'react'
+import { Badge, IconButton, Menu, MenuItem, Paper, Tooltip, Typography } from '@mui/material'
+import AppTextButton from '@/shared/ui/AppTextButton'
+import { useNotifications } from '@/features/notifications/application/useNotifications'
 
 const breadcrumbMap: Record<string, string> = {
     '/anggaran': 'Integrasi Anggaran',
-    '/paket': 'Paket Pekerjaan',
-    '/paket/tambah': 'Tambah Paket',
-    '/progres': 'Progres & Dokumen',
-    '/kurva-s': 'Kurva-S',
-    '/ews': 'Early Warning System',
-    '/users': 'Manajemen User',
+    '/progres-satker': 'Progres Satker',
+    '/progres-satker/tambah': 'Tambah Paket',
+    '/ews': 'Sistem Peringatan Dini',
+    '/users': 'Manajemen Pengguna',
+    '/audit-trail': 'Jejak Audit',
 }
 
 export default function Topbar() {
     const location = useLocation()
     const user = useAuthStore((s) => s.user)
     const logout = useAuthStore((s) => s.logout)
+    const navigate = useNavigate()
     const isCollapsed = useSidebarStore((s) => s.isCollapsed)
+    const [showNotifications, setShowNotifications] = useState(false)
     const [showProfileMenu, setShowProfileMenu] = useState(false)
+    const notificationRef = useRef<HTMLDivElement>(null)
     const profileRef = useRef<HTMLDivElement>(null)
+    const { notifications, isLoading, fetchNotifications } = useNotifications()
 
-    // Close dropdown on outside click
     useEffect(() => {
         function handleClick(e: MouseEvent) {
             if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
                 setShowProfileMenu(false)
+            }
+            if (notificationRef.current && !notificationRef.current.contains(e.target as Node)) {
+                setShowNotifications(false)
             }
         }
         document.addEventListener('mousedown', handleClick)
         return () => document.removeEventListener('mousedown', handleClick)
     }, [])
 
-    // Build breadcrumbs
+    useEffect(() => {
+        if (showNotifications) {
+            fetchNotifications()
+        }
+    }, [showNotifications, fetchNotifications])
+
     const pathParts = location.pathname.split('/').filter(Boolean)
-    const crumbs = [{ label: 'Dashboard', path: '/' }]
+    const crumbs = [{ label: 'Beranda', path: '/' }]
     let accumulated = ''
     for (const part of pathParts) {
         accumulated += `/${part}`
@@ -49,33 +62,77 @@ export default function Topbar() {
             className={`fixed top-0 right-0 h-[60px] bg-white border-b border-slate-200 flex items-center justify-between px-6 z-30 transition-all duration-300 ${isCollapsed ? 'left-[72px]' : 'left-[250px]'
                 }`}
         >
-            {/* Breadcrumbs */}
             <nav className="flex items-center gap-1 text-sm text-slate-500">
                 {crumbs.map((crumb, i) => (
                     <span key={crumb.path} className="flex items-center gap-1">
                         {i > 0 && <ChevronRight size={14} className="text-slate-300" />}
-                        <span
-                            className={
-                                i === crumbs.length - 1
-                                    ? 'text-slate-800 font-semibold'
-                                    : 'hover:text-primary-600 cursor-pointer'
-                            }
-                        >
+                        <span className={i === crumbs.length - 1 ? 'text-slate-800 font-semibold' : 'hover:text-primary-600 cursor-pointer'}>
                             {crumb.label}
                         </span>
                     </span>
                 ))}
             </nav>
 
-            {/* Right Actions */}
-            <div className="flex items-center gap-4">
-                {/* Notifications */}
-                <button className="relative p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
-                    <Bell size={20} />
-                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
-                </button>
+            <div className="flex items-center gap-3">
+                <div className="relative" ref={notificationRef}>
+                    <Tooltip title="Notifikasi">
+                        <IconButton size="small" onClick={() => setShowNotifications(!showNotifications)}>
+                            <Badge color="error" badgeContent={notifications.length} max={99}>
+                                <Bell size={18} />
+                            </Badge>
+                        </IconButton>
+                    </Tooltip>
 
-                {/* Profile Dropdown */}
+                    {showNotifications && (
+                        <Paper className="absolute right-0 top-full mt-2 w-80 border border-slate-200 overflow-hidden z-50">
+                            <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                                <Typography variant="subtitle2" fontWeight={700}>Pusat Notifikasi</Typography>
+                                {notifications.length > 0 ? <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-bold">{notifications.length} baru</span> : null}
+                            </div>
+                            <div className="max-h-96 overflow-y-auto">
+                                {isLoading ? (
+                                    <div className="p-8 text-center text-sm text-slate-500">Memuat notifikasi...</div>
+                                ) : notifications.length === 0 ? (
+                                    <div className="p-8 text-center">
+                                        <p className="text-sm text-slate-400">Tidak ada notifikasi baru</p>
+                                    </div>
+                                ) : (
+                                    notifications.map((notification) => (
+                                        <button
+                                            key={notification.id}
+                                            className="w-full text-left p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors"
+                                            onClick={() => {
+                                                setShowNotifications(false)
+                                                if (notification.paket_id) {
+                                                    navigate(`/progres/${notification.paket_id}`)
+                                                }
+                                            }}
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <div className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${notification.type === 'critical' ? 'bg-red-500' : notification.type === 'warning' ? 'bg-yellow-500' : 'bg-blue-500'}`} />
+                                                <div>
+                                                    <p className="text-sm font-semibold text-slate-800">{notification.title}</p>
+                                                    <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{notification.detail}</p>
+                                                    <p className="text-[10px] text-slate-400 mt-2 uppercase font-medium tracking-wider">{notification.time}</p>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    ))
+                                )}
+                            </div>
+                            <div className="flex justify-end p-2 border-t border-slate-100">
+                                <AppTextButton
+                                    label="Lihat semua"
+                                    onClick={() => {
+                                        setShowNotifications(false)
+                                        navigate('/ews')
+                                    }}
+                                />
+                            </div>
+                        </Paper>
+                    )}
+                </div>
+
                 <div className="relative" ref={profileRef}>
                     <button
                         onClick={() => setShowProfileMenu(!showProfileMenu)}
@@ -85,24 +142,28 @@ export default function Topbar() {
                             <User size={16} className="text-primary-600" />
                         </div>
                         <div className="text-left hidden sm:block">
-                            <p className="text-sm font-medium text-slate-700 leading-tight">
-                                {user?.fullName}
-                            </p>
-                            <p className="text-xs text-slate-400">{user?.role}</p>
+                            <p className="text-sm font-medium text-slate-700 leading-tight">{user?.FullName}</p>
+                            <p className="text-xs text-slate-400">{user?.Role}</p>
                         </div>
                     </button>
 
-                    {showProfileMenu && (
-                        <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-200 py-2 animate-in fade-in slide-in-from-top-1">
-                            <button
-                                onClick={logout}
-                                className="flex items-center gap-2 w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                            >
-                                <LogOut size={16} />
-                                Logout
-                            </button>
-                        </div>
-                    )}
+                    <Menu
+                        open={showProfileMenu}
+                        onClose={() => setShowProfileMenu(false)}
+                        anchorEl={profileRef.current}
+                        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                    >
+                        <MenuItem
+                            onClick={async () => {
+                                await logout()
+                                navigate('/login', { replace: true })
+                            }}
+                        >
+                            <LogOut size={16} className="mr-2" />
+                            Keluar
+                        </MenuItem>
+                    </Menu>
                 </div>
             </div>
         </header>

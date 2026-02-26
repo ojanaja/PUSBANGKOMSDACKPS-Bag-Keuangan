@@ -1,36 +1,90 @@
-import { lazy, Suspense } from 'react'
-import { createBrowserRouter, RouterProvider } from 'react-router-dom'
+import { lazy, Suspense, useEffect } from 'react'
+import { createBrowserRouter, RouterProvider, Navigate, Outlet } from 'react-router-dom'
+import { useAuthStore } from '@/stores/authStore'
 import AppLayout from './components/layout/AppLayout'
+import AppLoader from '@/shared/ui/AppLoader'
 
-// Lazy load pages
+const LoginPage = lazy(() => import('./pages/LoginPage'))
 const DashboardPage = lazy(() => import('./pages/DashboardPage'))
 const AnggaranPage = lazy(() => import('./pages/AnggaranPage'))
-const PaketPage = lazy(() => import('./pages/PaketPage'))
+const PaketListPage = lazy(() => import('./pages/PaketListPage'))
+const PaketWizardPage = lazy(() => import('./pages/PaketWizardPage'))
 const ProgresPage = lazy(() => import('./pages/ProgresPage'))
 const KurvaSPage = lazy(() => import('./pages/KurvaSPage'))
+const UsersPage = lazy(() => import('./pages/UsersPage'))
+const EWSPage = lazy(() => import('./pages/EWSPage'))
+const AuditTrailPage = lazy(() => import('./pages/AuditTrailPage'))
 
 function PageLoader() {
-  return (
-    <div className="flex items-center justify-center h-64">
-      <div className="w-8 h-8 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
-    </div>
-  )
+  return <AppLoader label="Memuat halaman..." />
+}
+
+function FullScreenLoader() {
+  return <AppLoader fullscreen label="Menyiapkan aplikasi..." />
+}
+
+function ProtectedRoute() {
+  const { isAuthenticated, isInitialized } = useAuthStore()
+
+  if (!isInitialized) return <FullScreenLoader />
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+
+  return <Outlet />
+}
+
+function PublicRoute() {
+  const { isAuthenticated, isInitialized } = useAuthStore()
+
+  if (!isInitialized) return <FullScreenLoader />
+  if (isAuthenticated) return <Navigate to="/" replace />
+
+  return <Outlet />
 }
 
 const router = createBrowserRouter([
   {
-    path: '/',
-    element: <AppLayout />,
+    path: '/login',
+    element: <PublicRoute />,
     children: [
-      { index: true, element: <Suspense fallback={<PageLoader />}><DashboardPage /></Suspense> },
-      { path: 'anggaran', element: <Suspense fallback={<PageLoader />}><AnggaranPage /></Suspense> },
-      { path: 'paket', element: <Suspense fallback={<PageLoader />}><PaketPage /></Suspense> },
-      { path: 'progres', element: <Suspense fallback={<PageLoader />}><ProgresPage /></Suspense> },
-      { path: 'kurva-s', element: <Suspense fallback={<PageLoader />}><KurvaSPage /></Suspense> },
+      { index: true, element: <Suspense fallback={<FullScreenLoader />}><LoginPage /></Suspense> },
+    ],
+  },
+  {
+    path: '/',
+    element: <ProtectedRoute />,
+    children: [
+      {
+        element: <AppLayout />,
+        children: [
+          { index: true, element: <Suspense fallback={<PageLoader />}><DashboardPage /></Suspense> },
+          { path: 'anggaran', element: <Suspense fallback={<PageLoader />}><AnggaranPage /></Suspense> },
+          { path: 'progres-satker', element: <Suspense fallback={<PageLoader />}><PaketListPage /></Suspense> },
+          { path: 'progres-satker/tambah', element: <Suspense fallback={<PageLoader />}><PaketWizardPage /></Suspense> },
+          { path: 'progres/:id', element: <Suspense fallback={<PageLoader />}><ProgresPage /></Suspense> },
+          { path: 'kurva-s/:id', element: <Suspense fallback={<PageLoader />}><KurvaSPage /></Suspense> },
+          { path: 'paket', element: <Navigate to="/progres-satker" replace /> },
+          { path: 'paket/tambah', element: <Navigate to="/progres-satker/tambah" replace /> },
+          { path: 'progres', element: <Navigate to="/progres-satker" replace /> },
+          { path: 'kurva-s', element: <Navigate to="/progres-satker" replace /> },
+          { path: 'users', element: <Suspense fallback={<PageLoader />}><UsersPage /></Suspense> },
+          { path: 'ews', element: <Suspense fallback={<PageLoader />}><EWSPage /></Suspense> },
+          { path: 'audit-trail', element: <Suspense fallback={<PageLoader />}><AuditTrailPage /></Suspense> },
+        ],
+      },
     ],
   },
 ])
 
 export default function App() {
+  const { checkAuth, isInitialized } = useAuthStore()
+
+  useEffect(() => {
+    checkAuth()
+  }, [checkAuth])
+
+  if (!isInitialized) {
+    return <FullScreenLoader />
+  }
+
   return <RouterProvider router={router} />
 }
