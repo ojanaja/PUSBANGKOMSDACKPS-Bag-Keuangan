@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -7,92 +7,23 @@ import { X, FileText, AlertCircle, ChevronLeft, Printer } from 'lucide-react'
 import PageHeader from '@/shared/ui/PageHeader'
 import AppLoader from '@/shared/ui/AppLoader'
 import AppTextButton from '@/shared/ui/AppTextButton'
+import { useKurvaS } from '@/features/kurvas/application/useKurvaS'
+import { MONTHS_SHORT } from '@/shared/config/months'
 
-const monthsLong = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
-const monthsShort = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
-
-interface PaketDetail {
-    ID: string
-    NamaPaket: string
-    Kasatker: string
-}
-
-interface Target {
-    Bulan: number
-    PersenKeuangan: number
-    PersenFisik: number
-}
-
-interface RealisasiFisik {
-    Bulan: number
-    PersenAktual: number
-    CatatanKendala: string
-}
+const monthsShort = MONTHS_SHORT
 
 export default function KurvaSPage() {
     const { id } = useParams()
     const tahun = new Date().getFullYear()
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
-    const [paket, setPaket] = useState<PaketDetail | null>(null)
-    const [chartData, setChartData] = useState<any[]>([])
     const [drawerOpen, setDrawerOpen] = useState(false)
     const [selectedMonth, setSelectedMonth] = useState<number | null>(null)
 
-    useEffect(() => {
-        if (id) fetchDetail()
-    }, [id])
+    const { data, isLoading: loading, error: queryError } = useKurvaS(id)
+    const paket = data?.paket || null
+    const chartData = data?.chartData || []
+    const error = queryError instanceof Error ? queryError.message : null
 
-    const fetchDetail = async () => {
-        setLoading(true)
-        try {
-            const res = await fetch(`/api/v1/paket/${id}`, { credentials: 'include' })
-            if (!res.ok) throw new Error('Paket tidak ditemukan')
-            const data = await res.json()
-
-            setPaket(data.paket || data)
-
-            const targets: Target[] = data.targets || []
-            const realisasi: RealisasiFisik[] = data.realisasi || []
-
-            let cumRencanaKeu = 0
-            let cumRencanaFis = 0
-            let cumRealFis = 0
-
-            const processed = monthsShort.map((m, i) => {
-                const monthNum = i + 1
-                const t = targets.find(target => target.Bulan === monthNum)
-                const r = realisasi.find(real => real.Bulan === monthNum)
-
-                cumRencanaKeu += t ? Number(t.PersenKeuangan) : 0
-                cumRencanaFis += t ? Number(t.PersenFisik) : 0
-
-                const hasData = r && (r.PersenAktual > 0 || r.CatatanKendala)
-                if (hasData || monthNum <= new Date().getMonth() + 1) {
-                    cumRealFis += r ? Number(r.PersenAktual) : 0
-                }
-
-                const isFuture = monthNum > new Date().getMonth() + 1 && !hasData
-
-                return {
-                    bulan: m,
-                    bulanFull: monthsLong[i],
-                    rencanaKeu: Math.min(100, cumRencanaKeu),
-                    rencanaFisik: Math.min(100, cumRencanaFis),
-                    realisasiFisik: isFuture ? null : Math.min(100, cumRealFis),
-                    kendala: r?.CatatanKendala || ''
-                }
-            })
-
-            setChartData(processed)
-        } catch (e) {
-            setError(e instanceof Error ? e.message : 'Terjadi kesalahan')
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    const handleChartClick = (data: any) => {
+    const handleChartClick = (data: { activePayload?: Array<{ payload?: { bulan: string } }> }) => {
         if (data?.activePayload?.[0]?.payload) {
             const payload = data.activePayload[0].payload
             const mIndex = monthsShort.indexOf(payload.bulan)
@@ -129,20 +60,6 @@ export default function KurvaSPage() {
                     />
                 </div>
             </div>
-
-            <style>{`
-                @media print {
-                    .no-print { display: none !important; }
-                    body { background: white !important; }
-                    .p-8 { padding: 0 !important; }
-                    .bg-white { border: 1px solid #e2e8f0 !important; box-shadow: none !important; }
-                    .rounded-2xl { border-radius: 0.5rem !important; }
-                    .shadow-sm { box-shadow: none !important; }
-                    .h-[450px] { height: 500px !important; }
-                    table { page-break-inside: auto; }
-                    tr { page-break-inside: avoid; page-break-after: auto; }
-                }
-            `}</style>
 
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8">
                 <div className="flex items-center justify-between mb-8">
@@ -229,8 +146,9 @@ export default function KurvaSPage() {
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
+                        <caption className="sr-only">Tabel Deviasi Kumulatif</caption>
                         <thead>
-                            <tr className="bg-white text-slate-400 font-bold uppercase tracking-wider text-[10px] border-b border-slate-100">
+                            <tr>
                                 <th className="px-6 py-4 text-left">Bulan</th>
                                 <th className="px-6 py-4 text-center">Rencana Fisik</th>
                                 <th className="px-6 py-4 text-center">Realisasi Fisik</th>
@@ -258,39 +176,41 @@ export default function KurvaSPage() {
                 </div>
             </div>
 
-            {drawerOpen && selectedMonth !== null && (
-                <>
-                    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 transition-opacity" onClick={() => setDrawerOpen(false)} />
-                    <div className="fixed top-0 right-0 h-full w-full max-w-112.5 bg-white shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
-                        <div className="flex items-center justify-between px-8 py-6 border-b border-slate-100 bg-slate-50/50">
-                            <div>
-                                <h3 className="text-xl font-bold text-slate-900">Rincian Laporan</h3>
-                                <p className="text-sm text-slate-500 mt-0.5">{chartData[selectedMonth].bulanFull} {tahun}</p>
-                            </div>
-                            <button onClick={() => setDrawerOpen(false)} className="p-2 rounded-xl hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-200 transition-all text-slate-400">
-                                <X size={20} />
-                            </button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-8 space-y-8">
-                            <div className="space-y-4">
-                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Analisis Progres & Kendala</h4>
-                                <div className={`p-5 rounded-2xl border ${chartData[selectedMonth].kendala ? 'bg-amber-50 border-amber-100 text-amber-900' : 'bg-slate-50 border-slate-100 text-slate-500 italic text-sm'}`}>
-                                    {chartData[selectedMonth].kendala || 'Tidak ada catatan kendala dilaporkan pada bulan ini.'}
+            {
+                drawerOpen && selectedMonth !== null && (
+                    <>
+                        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 transition-opacity" onClick={() => setDrawerOpen(false)} />
+                        <div className="fixed top-0 right-0 h-full w-full max-w-112.5 bg-white shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
+                            <div className="flex items-center justify-between px-8 py-6 border-b border-slate-100 bg-slate-50/50">
+                                <div>
+                                    <h3 className="text-xl font-bold text-slate-900">Rincian Laporan</h3>
+                                    <p className="text-sm text-slate-500 mt-0.5">{chartData[selectedMonth].bulanFull} {tahun}</p>
                                 </div>
+                                <button onClick={() => setDrawerOpen(false)} className="p-2 rounded-xl hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-200 transition-all text-slate-400">
+                                    <X size={20} />
+                                </button>
                             </div>
+                            <div className="flex-1 overflow-y-auto p-8 space-y-8">
+                                <div className="space-y-4">
+                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Analisis Progres & Kendala</h4>
+                                    <div className={`p-5 rounded-2xl border ${chartData[selectedMonth].kendala ? 'bg-amber-50 border-amber-100 text-amber-900' : 'bg-slate-50 border-slate-100 text-slate-500 italic text-sm'}`}>
+                                        {chartData[selectedMonth].kendala || 'Tidak ada catatan kendala dilaporkan pada bulan ini.'}
+                                    </div>
+                                </div>
 
-                            <div className="space-y-4">
-                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Dokumen Bukti Pendukung</h4>
-                                <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                                    <FileText size={40} className="text-slate-200 mx-auto mb-3" />
-                                    <p className="text-sm text-slate-400 font-medium">Dokumen sedang disinkronisasi...</p>
-                                    <Link to={`/progres/${id}`} className="mt-4 inline-flex text-xs font-bold text-primary-600 uppercase tracking-widest hover:underline">Kelola Dokumen Di Sini</Link>
+                                <div className="space-y-4">
+                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Dokumen Bukti Pendukung</h4>
+                                    <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                                        <FileText size={40} className="text-slate-200 mx-auto mb-3" />
+                                        <p className="text-sm text-slate-400 font-medium">Dokumen sedang disinkronisasi...</p>
+                                        <Link to={`/progres/${id}`} className="mt-4 inline-flex text-xs font-bold text-primary-600 uppercase tracking-widest hover:underline">Kelola Dokumen Di Sini</Link>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                </>
-            )}
-        </div>
+                    </>
+                )
+            }
+        </div >
     )
 }
