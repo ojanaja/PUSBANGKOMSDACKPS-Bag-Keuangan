@@ -1,27 +1,19 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Check, ChevronRight, Search, Loader2, AlertCircle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { usePaketWizard } from '@/features/paket/application/usePaketWizard'
+import { formatCurrency } from '@/lib/formatCurrency'
+import { MONTHS_SHORT } from '@/shared/config/months'
 
 const steps = ['Profil Paket', 'Mapping Anggaran', 'Target Bulanan']
-const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
-
-interface AnggaranAkun {
-    AkunID: string
-    AkunKode: string
-    AkunUraian: string
-    Pagu: number
-}
-
-function formatCurrency(v: number) {
-    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(v)
-}
+const months = MONTHS_SHORT
 
 export default function PaketPage() {
     const navigate = useNavigate()
+    const tahun = new Date().getFullYear()
+    const { akunQuery, createMutation } = usePaketWizard(tahun)
+
     const [step, setStep] = useState(0)
-    const [submitting, setSubmitting] = useState(false)
-    const [loadingAkun, setLoadingAkun] = useState(false)
-    const [akunList, setAkunList] = useState<AnggaranAkun[]>([])
     const [error, setError] = useState<string | null>(null)
 
     const [nama, setNama] = useState('')
@@ -36,38 +28,9 @@ export default function PaketPage() {
     const [keuangan, setKeuangan] = useState<number[]>(Array(12).fill(0))
     const [fisik, setFisik] = useState<number[]>(Array(12).fill(0))
 
-    useEffect(() => {
-        if (step === 1 && akunList.length === 0) {
-            fetchAkun()
-        }
-    }, [step])
-
-    const fetchAkun = async () => {
-        setLoadingAkun(true)
-        try {
-            const res = await fetch(`/api/v1/anggaran/tree?tahun=${new Date().getFullYear()}`, { credentials: 'include' })
-            if (!res.ok) throw new Error('Gagal mengambil data anggaran')
-            const data = await res.json()
-            const uniqueAkun = new Map<string, AnggaranAkun>()
-            if (Array.isArray(data)) {
-                data.forEach((row: any) => {
-                    if (row.AkunID && row.AkunKode && row.AkunUraian) {
-                        uniqueAkun.set(row.AkunID, {
-                            AkunID: row.AkunID,
-                            AkunKode: row.AkunKode,
-                            AkunUraian: row.AkunUraian,
-                            Pagu: row.Pagu
-                        })
-                    }
-                })
-            }
-            setAkunList(Array.from(uniqueAkun.values()))
-        } catch (e) {
-            setError(e instanceof Error ? e.message : 'Terjadi kesalahan')
-        } finally {
-            setLoadingAkun(false)
-        }
-    }
+    const akunList = akunQuery.data ?? []
+    const loadingAkun = akunQuery.isLoading
+    const submitting = createMutation.isPending
 
     const validateStep1 = () => {
         const e: Record<string, string> = {}
@@ -94,41 +57,23 @@ export default function PaketPage() {
     }
 
     const handleSubmit = async () => {
-        setSubmitting(true)
         setError(null)
 
-        const payload = {
-            nama_paket: nama,
-            kasatker: kasatker,
-            lokasi: lokasi,
-            pagu_paket: Number(pagu),
-            akun_ids: selectedAkunIds,
-            targets: months.map((_, i) => ({
-                bulan: i + 1,
-                persen_keuangan: keuangan[i],
-                persen_fisik: fisik[i]
-            }))
-        }
-
-        try {
-            const res = await fetch('/api/v1/paket', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-                credentials: 'include'
-            })
-
-            if (!res.ok) {
-                const data = await res.json().catch(() => ({}))
-                throw new Error(data.message || 'Gagal menyimpan paket')
+        createMutation.mutate(
+            {
+                nama: nama,
+                kasatker: kasatker,
+                lokasi: lokasi,
+                pagu: Number(pagu),
+                akun_ids: selectedAkunIds,
+                target_keuangan: keuangan,
+                target_fisik: fisik,
+            },
+            {
+                onSuccess: () => navigate('/progres'),
+                onError: (e) => setError(e instanceof Error ? e.message : 'Terjadi kesalahan'),
             }
-
-            navigate('/progres')
-        } catch (e) {
-            setError(e instanceof Error ? e.message : 'Terjadi kesalahan')
-        } finally {
-            setSubmitting(false)
-        }
+        )
     }
 
     const filteredAkun = akunList.filter(
@@ -246,6 +191,7 @@ export default function PaketPage() {
                         <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                             <div className="max-h-[400px] overflow-y-auto">
                                 <table className="w-full text-sm">
+                                    <caption className="sr-only">Daftar Akun Anggaran</caption>
                                     <thead className="sticky top-0 bg-slate-50 shadow-sm">
                                         <tr className="text-left text-slate-500 font-semibold">
                                             <th className="px-6 py-3 w-16">Pilih</th>
@@ -315,8 +261,9 @@ export default function PaketPage() {
 
                         <div className="overflow-x-auto rounded-xl border border-slate-200">
                             <table className="w-full text-sm">
+                                <caption className="sr-only">Target Capaian Bulanan</caption>
                                 <thead>
-                                    <tr className="bg-slate-50 text-slate-500 font-semibold">
+                                    <tr>
                                         <th className="px-4 py-3 text-left sticky left-0 bg-slate-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Indikator</th>
                                         {months.map((m) => (
                                             <th key={m} className="px-4 py-3 text-center min-w-[70px]">{m}</th>
@@ -404,6 +351,6 @@ export default function PaketPage() {
                     </button>
                 </div>
             </div>
-        </div>
+        </div >
     )
 }

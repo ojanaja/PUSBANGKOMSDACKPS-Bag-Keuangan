@@ -1,57 +1,33 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Plus, Search, Download, FolderKanban, ExternalLink, Loader2, AlertCircle, TrendingUp, Edit2, Trash2, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import PageHeader from '@/shared/ui/PageHeader'
 import AppTextButton from '@/shared/ui/AppTextButton'
-
-interface Paket {
-    ID: string
-    NamaPaket: string
-    Kasatker: string
-    Lokasi: string
-    PaguPaket: number
-    PaguAnggaran: number
-    RealisasiAnggaran: number
-    RealisasiFisik: number
-}
-
-function formatCurrency(v: number) {
-    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(v)
-}
+import { apiUrl } from '@/shared/api/httpClient'
+import { usePaketList, type Paket } from '@/features/paket/application/usePaketList'
+import { formatCurrency } from '@/lib/formatCurrency'
+import { FISCAL_YEAR_OPTIONS } from '@/shared/config/constants'
+import { useToast } from '@/shared/hooks/useToast'
 
 export default function PaketListPage() {
-    const [pakets, setPakets] = useState<Paket[]>([])
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
     const [search, setSearch] = useState('')
     const [tahun, setTahun] = useState(new Date().getFullYear())
+    const { showToast } = useToast()
+
+    const { query, updateMutation, deleteMutation } = usePaketList(tahun)
+    const pakets = query.data || []
+    const loading = query.isLoading
+    const error = query.error instanceof Error ? query.error.message : null
 
     const [editModalOpen, setEditModalOpen] = useState(false)
     const [deleteModalOpen, setDeleteModalOpen] = useState(false)
     const [selectedPaket, setSelectedPaket] = useState<Paket | null>(null)
     const [editData, setEditData] = useState<Partial<Paket>>({})
-    const [submitting, setSubmitting] = useState(false)
 
-    useEffect(() => {
-        fetchPakets()
-    }, [tahun])
-
-    const fetchPakets = async () => {
-        setLoading(true)
-        try {
-            const res = await fetch(`/api/v1/paket?tahun=${tahun}`, { credentials: 'include' })
-            if (!res.ok) throw new Error('Gagal mengambil daftar paket')
-            const data = await res.json()
-            setPakets(data || [])
-        } catch (e) {
-            setError(e instanceof Error ? e.message : 'Terjadi kesalahan')
-        } finally {
-            setLoading(false)
-        }
-    }
+    const submitting = updateMutation.isPending || deleteMutation.isPending
 
     const handleExportExcel = () => {
-        window.location.href = `/api/v1/paket/export?tahun=${tahun}`
+        window.location.href = apiUrl(`/paket/export?tahun=${tahun}`)
     }
 
     const handleEditClick = (paket: Paket) => {
@@ -73,42 +49,21 @@ export default function PaketListPage() {
     const submitEdit = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!selectedPaket) return
-        setSubmitting(true)
         try {
-            const res = await fetch(`/api/v1/paket/${selectedPaket.ID}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    nama_paket: editData.NamaPaket,
-                    kasatker: editData.Kasatker,
-                    lokasi: editData.Lokasi,
-                    pagu_paket: Number(editData.PaguPaket)
-                })
-            })
-            if (!res.ok) throw new Error('Gagal menyimpan perubahan')
+            await updateMutation.mutateAsync({ id: selectedPaket.ID, data: editData })
             setEditModalOpen(false)
-            fetchPakets()
         } catch (err) {
-            alert(err instanceof Error ? err.message : 'Terjadi kesalahan')
-        } finally {
-            setSubmitting(false)
+            showToast(err instanceof Error ? err.message : 'Terjadi kesalahan', 'error')
         }
     }
 
     const submitDelete = async () => {
         if (!selectedPaket) return
-        setSubmitting(true)
         try {
-            const res = await fetch(`/api/v1/paket/${selectedPaket.ID}`, {
-                method: 'DELETE'
-            })
-            if (!res.ok) throw new Error('Gagal menghapus paket')
+            await deleteMutation.mutateAsync(selectedPaket.ID)
             setDeleteModalOpen(false)
-            fetchPakets()
         } catch (err) {
-            alert(err instanceof Error ? err.message : 'Terjadi kesalahan')
-        } finally {
-            setSubmitting(false)
+            showToast(err instanceof Error ? err.message : 'Terjadi kesalahan', 'error')
         }
     }
 
@@ -152,7 +107,7 @@ export default function PaketListPage() {
                             onChange={(e) => setTahun(Number(e.target.value))}
                             className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white font-bold text-primary-600 shadow-sm outline-none focus:ring-2 focus:ring-primary-500"
                         >
-                            {[2024, 2025, 2026, 2027].map(y => (
+                            {FISCAL_YEAR_OPTIONS.map(y => (
                                 <option key={y} value={y}>{y}</option>
                             ))}
                         </select>
@@ -169,7 +124,7 @@ export default function PaketListPage() {
                         <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
                             <AlertCircle size={40} className="text-red-400" />
                             <p className="text-red-600 font-medium">{error}</p>
-                            <AppTextButton label="Coba lagi" onClick={fetchPakets} />
+                            <AppTextButton label="Coba lagi" onClick={() => query.refetch()} />
                         </div>
                     ) : filteredPakets.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-24 text-center">
@@ -181,8 +136,9 @@ export default function PaketListPage() {
                         </div>
                     ) : (
                         <table className="w-full text-sm">
+                            <caption className="sr-only">Daftar Paket Pekerjaan</caption>
                             <thead>
-                                <tr className="bg-slate-50 text-left text-slate-500 font-semibold border-b border-slate-100">
+                                <tr>
                                     <th className="px-6 py-4">Nama Paket</th>
                                     <th className="px-6 py-4">Kasatker / Lokasi</th>
                                     <th className="px-6 py-4 text-right">Pagu</th>
@@ -275,62 +231,66 @@ export default function PaketListPage() {
                 </div>
             </div>
 
-            {editModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
-                        <div className="flex items-center justify-between p-4 border-b border-slate-100">
-                            <h3 className="font-bold text-lg text-slate-800">Edit Paket Pekerjaan</h3>
-                            <button onClick={() => setEditModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100">
-                                <X size={20} />
-                            </button>
-                        </div>
-                        <div className="p-4 overflow-y-auto">
-                            <form id="edit-paket-form" onSubmit={submitEdit} className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Nama Paket</label>
-                                    <input type="text" value={editData.NamaPaket || ''} onChange={(e) => setEditData({ ...editData, NamaPaket: e.target.value })} required className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 text-sm" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Kasatker</label>
-                                    <input type="text" value={editData.Kasatker || ''} onChange={(e) => setEditData({ ...editData, Kasatker: e.target.value })} required className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 text-sm" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Lokasi</label>
-                                    <input type="text" value={editData.Lokasi || ''} onChange={(e) => setEditData({ ...editData, Lokasi: e.target.value })} required className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 text-sm" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Pagu Paket</label>
-                                    <input type="number" value={editData.PaguPaket || ''} onChange={(e) => setEditData({ ...editData, PaguPaket: Number(e.target.value) })} required className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 text-sm" />
-                                </div>
-                            </form>
-                        </div>
-                        <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-                            <AppTextButton label="Batal" onClick={() => setEditModalOpen(false)} />
-                            <AppTextButton label={submitting ? 'Menyimpan...' : 'Simpan perubahan'} type="submit" form="edit-paket-form" disabled={submitting} color="primary" />
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {deleteModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col">
-                        <div className="p-6 text-center">
-                            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <AlertCircle size={32} />
+            {
+                editModalOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+                        <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+                            <div className="flex items-center justify-between p-4 border-b border-slate-100">
+                                <h3 className="font-bold text-lg text-slate-800">Edit Paket Pekerjaan</h3>
+                                <button onClick={() => setEditModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100">
+                                    <X size={20} />
+                                </button>
                             </div>
-                            <h3 className="font-bold text-lg text-slate-800 mb-2">Hapus Paket Pekerjaan?</h3>
-                            <p className="text-sm text-slate-500">
-                                Tindakan ini tidak dapat dibatalkan. Menghapus paket akan menghapus semua data realisasi dan dokumen yang terkait.
-                            </p>
-                        </div>
-                        <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-                            <AppTextButton label="Batal" onClick={() => setDeleteModalOpen(false)} fullWidth />
-                            <AppTextButton label={submitting ? 'Menghapus...' : 'Hapus paket'} onClick={submitDelete} disabled={submitting} color="error" fullWidth />
+                            <div className="p-4 overflow-y-auto">
+                                <form id="edit-paket-form" onSubmit={submitEdit} className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">Nama Paket</label>
+                                        <input type="text" value={editData.NamaPaket || ''} onChange={(e) => setEditData({ ...editData, NamaPaket: e.target.value })} required className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">Kasatker</label>
+                                        <input type="text" value={editData.Kasatker || ''} onChange={(e) => setEditData({ ...editData, Kasatker: e.target.value })} required className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">Lokasi</label>
+                                        <input type="text" value={editData.Lokasi || ''} onChange={(e) => setEditData({ ...editData, Lokasi: e.target.value })} required className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">Pagu Paket</label>
+                                        <input type="number" value={editData.PaguPaket || ''} onChange={(e) => setEditData({ ...editData, PaguPaket: Number(e.target.value) })} required className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 text-sm" />
+                                    </div>
+                                </form>
+                            </div>
+                            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+                                <AppTextButton label="Batal" onClick={() => setEditModalOpen(false)} />
+                                <AppTextButton label={submitting ? 'Menyimpan...' : 'Simpan perubahan'} type="submit" form="edit-paket-form" disabled={submitting} color="primary" />
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+
+            {
+                deleteModalOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+                        <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col">
+                            <div className="p-6 text-center">
+                                <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <AlertCircle size={32} />
+                                </div>
+                                <h3 className="font-bold text-lg text-slate-800 mb-2">Hapus Paket Pekerjaan?</h3>
+                                <p className="text-sm text-slate-500">
+                                    Tindakan ini tidak dapat dibatalkan. Menghapus paket akan menghapus semua data realisasi dan dokumen yang terkait.
+                                </p>
+                            </div>
+                            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+                                <AppTextButton label="Batal" onClick={() => setDeleteModalOpen(false)} fullWidth />
+                                <AppTextButton label={submitting ? 'Menghapus...' : 'Hapus paket'} onClick={submitDelete} disabled={submitting} color="error" fullWidth />
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+        </div >
     )
 }
