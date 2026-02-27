@@ -1,48 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { History, Search, Loader2, Clock, Layout, FileEdit, Trash2, CheckCircle, Globe } from 'lucide-react'
-
-interface AuditLog {
-    id: string
-    user_id: string
-    user_full_name: string
-    user_username: string
-    action: string
-    target_type: string
-    target_id: string
-    details: any
-    ip_address: string
-    user_agent: string
-    created_at: string
-}
+import { useAuditLogs } from '@/features/audit/application/useAuditLogs'
 
 export default function AuditTrailPage() {
-    const [logs, setLogs] = useState<AuditLog[]>([])
-    const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState('')
     const [page, setPage] = useState(0)
-    const [total, setTotal] = useState(0)
+    const limit = 20
 
-    useEffect(() => {
-        fetchLogs()
-    }, [page])
-
-    const fetchLogs = async () => {
-        setLoading(true)
-        try {
-            const limit = 20
-            const offset = page * limit
-            const res = await fetch(`/api/v1/audit-logs?limit=${limit}&offset=${offset}`, { credentials: 'include' })
-            if (res.ok) {
-                const data = await res.json()
-                setLogs(data.logs || [])
-                setTotal(data.total || 0)
-            }
-        } catch (error) {
-            console.error('Failed to fetch audit logs', error)
-        } finally {
-            setLoading(false)
-        }
-    }
+    const { data, isLoading: loading } = useAuditLogs(page, limit)
+    const logs = data?.logs || []
+    const total = data?.total || 0
 
     const getActionIcon = (action: string) => {
         if (action.includes('CREATE')) return <Layout size={16} className="text-emerald-500" />
@@ -101,8 +68,9 @@ export default function AuditTrailPage() {
                         </div>
                     ) : (
                         <table className="w-full text-sm">
+                            <caption className="sr-only">Riwayat Audit Aktivitas</caption>
                             <thead>
-                                <tr className="bg-slate-50 text-left text-slate-500 font-bold border-b border-slate-100">
+                                <tr>
                                     <th className="px-6 py-4">Waktu</th>
                                     <th className="px-6 py-4">Pengguna</th>
                                     <th className="px-6 py-4">Aksi</th>
@@ -196,6 +164,6 @@ export default function AuditTrailPage() {
                     </div>
                 </div>
             </div>
-        </div>
+        </div >
     )
 }
