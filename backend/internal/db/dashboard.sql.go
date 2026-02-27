@@ -51,9 +51,9 @@ target_fisik_agg AS (
 target_keuangan_agg AS (
     SELECT
         tf.bulan,
-        SUM(tf.persen_keuangan) as sum_target_keuangan
+        SUM(tf.persen_keuangan * p.pagu_paket / 100.0) as sum_target_keuangan
     FROM paket_target tf
-    WHERE tf.paket_id IN (SELECT id FROM paket_filtered)
+    JOIN paket_filtered p ON tf.paket_id = p.id
     GROUP BY tf.bulan
 ),
 sp2d_bulanan AS (
@@ -93,12 +93,12 @@ ORDER BY m.bulan
 `
 
 type GetDashboardChartRow struct {
-	Bulan                 int32
-	TotalPaguPaket        float64
-	RencanaKeuanganPersen float64
-	RealisasiKeuanganRp   float64
-	RencanaFisikPersen    float64
-	RealisasiFisikPersen  float64
+	Bulan                 int32   `json:"bulan"`
+	TotalPaguPaket        float64 `json:"total_pagu_paket"`
+	RencanaKeuanganPersen float64 `json:"rencana_keuangan_persen"`
+	RealisasiKeuanganRp   float64 `json:"realisasi_keuangan_rp"`
+	RencanaFisikPersen    float64 `json:"rencana_fisik_persen"`
+	RealisasiFisikPersen  float64 `json:"realisasi_fisik_persen"`
 }
 
 func (q *Queries) GetDashboardChart(ctx context.Context, tahunAnggaran int32) ([]GetDashboardChartRow, error) {
@@ -168,12 +168,12 @@ LEFT JOIN pkt_doc_agg pd ON p.id = pd.paket_id
 `
 
 type GetDashboardDrillDownRow struct {
-	PaketID              pgtype.UUID
-	NamaPaket            string
-	PaguPaket            pgtype.Numeric
-	RealisasiKeuanganRp  interface{}
-	RealisasiFisikPersen pgtype.Numeric
-	Dokumen              []byte
+	PaketID              pgtype.UUID    `json:"paket_id"`
+	NamaPaket            string         `json:"nama_paket"`
+	PaguPaket            pgtype.Numeric `json:"pagu_paket"`
+	RealisasiKeuanganRp  interface{}    `json:"realisasi_keuangan_rp"`
+	RealisasiFisikPersen pgtype.Numeric `json:"realisasi_fisik_persen"`
+	Dokumen              []byte         `json:"dokumen"`
 }
 
 func (q *Queries) GetDashboardDrillDown(ctx context.Context, bulan int32) ([]GetDashboardDrillDownRow, error) {

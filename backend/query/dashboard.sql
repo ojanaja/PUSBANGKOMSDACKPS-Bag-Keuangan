@@ -38,9 +38,9 @@ target_fisik_agg AS (
 target_keuangan_agg AS (
     SELECT
         tf.bulan,
-        SUM(tf.persen_keuangan) as sum_target_keuangan
+        SUM(tf.persen_keuangan * p.pagu_paket / 100.0) as sum_target_keuangan
     FROM paket_target tf
-    WHERE tf.paket_id IN (SELECT id FROM paket_filtered)
+    JOIN paket_filtered p ON tf.paket_id = p.id
     GROUP BY tf.bulan
 ),
 sp2d_bulanan AS (
