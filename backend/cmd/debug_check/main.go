@@ -9,7 +9,11 @@ import (
 )
 
 func main() {
-	dbUrl := "postgres://siap_admin:siap_password@localhost:5432/siap_bpk?sslmode=disable"
+	dbUrl := os.Getenv("DB_URL")
+	if dbUrl == "" {
+		fmt.Fprintf(os.Stderr, "DB_URL environment variable is required\n")
+		os.Exit(1)
+	}
 	conn, err := pgx.Connect(context.Background(), dbUrl)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)

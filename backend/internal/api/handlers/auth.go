@@ -3,6 +3,8 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -73,8 +75,8 @@ func (h *AuthHandler) Login(c echo.Context) error {
 		Path:     "/",
 		Expires:  time.Now().Add(24 * time.Hour),
 		HttpOnly: true,
-		Secure:   false,
-		SameSite: http.SameSiteLaxMode,
+		Secure:   cookieSecureEnabled(),
+		SameSite: cookieSameSiteMode(),
 	})
 
 	uID := uuid.UUID(user.ID.Bytes)
@@ -98,8 +100,8 @@ func (h *AuthHandler) Logout(c echo.Context) error {
 		Path:     "/",
 		Expires:  time.Now().Add(-1 * time.Hour),
 		HttpOnly: true,
-		Secure:   false,
-		SameSite: http.SameSiteLaxMode,
+		Secure:   cookieSecureEnabled(),
+		SameSite: cookieSameSiteMode(),
 	})
 
 	claims := middleware.GetClaims(c)
@@ -144,4 +146,20 @@ func pgUUIDToString(id pgtype.UUID) string {
 	}
 	b := id.Bytes
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
+func cookieSecureEnabled() bool {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv("COOKIE_SECURE")))
+	return v == "1" || v == "true" || v == "yes" || v == "on"
+}
+
+func cookieSameSiteMode() http.SameSite {
+	switch strings.TrimSpace(strings.ToLower(os.Getenv("COOKIE_SAME_SITE"))) {
+	case "strict":
+		return http.SameSiteStrictMode
+	case "none":
+		return http.SameSiteNoneMode
+	default:
+		return http.SameSiteLaxMode
+	}
 }

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -26,7 +27,8 @@ func main() {
 
 	dbUrl := os.Getenv("DB_URL")
 	if dbUrl == "" {
-		dbUrl = "postgres://siap_admin:siap_password@localhost:5432/siap_bpk?sslmode=disable"
+		slog.Error("DB_URL environment variable is required")
+		os.Exit(1)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -55,7 +57,8 @@ func main() {
 
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
-		jwtSecret = "super-secret-jwt-key-change-in-production"
+		slog.Error("JWT_SECRET environment variable is required")
+		os.Exit(1)
 	}
 	authService := services.NewAuthService(jwtSecret)
 	activityLogger := services.NewActivityLogger(database)
@@ -67,6 +70,13 @@ func main() {
 	e.HideBanner = true
 
 	e.Use(middleware.Recover())
+	e.Use(middleware.CSRFWithConfig(middleware.CSRFConfig{
+		TokenLookup:    "header:X-CSRF-Token",
+		CookieName:     "_csrf",
+		CookiePath:     "/",
+		CookieHTTPOnly: false,
+		CookieSameSite: http.SameSiteLaxMode,
+	}))
 	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
 		LogStatus:   true,
 		LogURI:      true,
@@ -88,8 +98,22 @@ func main() {
 	}))
 	e.Use(middleware.RequestID())
 	e.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(100)))
+	allowOrigins := []string{"http://localhost:5173", "http://localhost:3000"}
+	if envOrigins := strings.TrimSpace(os.Getenv("CORS_ALLOW_ORIGINS")); envOrigins != "" {
+		parts := strings.Split(envOrigins, ",")
+		customOrigins := make([]string, 0, len(parts))
+		for _, origin := range parts {
+			trimmed := strings.TrimSpace(origin)
+			if trimmed != "" {
+				customOrigins = append(customOrigins, trimmed)
+			}
+		}
+		if len(customOrigins) > 0 {
+			allowOrigins = customOrigins
+		}
+	}
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins:     []string{"http://localhost:5173", "http://localhost:3000"},
+		AllowOrigins:     allowOrigins,
 		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete},
 		AllowHeaders:     []string{echo.HeaderContentType, echo.HeaderAccept},
 		AllowCredentials: true,
