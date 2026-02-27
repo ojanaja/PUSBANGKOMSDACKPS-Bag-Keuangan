@@ -104,6 +104,9 @@ func (c *CASStorage) Save(r io.Reader) (*SaveResult, error) {
 		return &SaveResult{Hash: hashHex, MimeType: mimeType, Size: finalSize}, nil
 	}
 
+	if _, err := fFinal.Seek(0, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("failed to seek file: %w", err)
+	}
 
 	destFile, err := os.Create(destPath)
 	if err != nil {
