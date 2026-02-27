@@ -29,24 +29,24 @@ ORDER BY sp.kode, sk.kode, so.kode, ss.kode, sa.kode
 `
 
 type GetAnggaranTreeRow struct {
-	ProgramID       pgtype.UUID
-	ProgramKode     string
-	ProgramUraian   string
-	KegiatanID      pgtype.UUID
-	KegiatanKode    string
-	KegiatanUraian  string
-	OutputID        pgtype.UUID
-	OutputKode      string
-	OutputUraian    string
-	SubOutputID     pgtype.UUID
-	SubOutputKode   string
-	SubOutputUraian string
-	AkunID          pgtype.UUID
-	AkunKode        string
-	AkunUraian      string
-	Pagu            pgtype.Numeric
-	Realisasi       pgtype.Numeric
-	Sisa            pgtype.Numeric
+	ProgramID       pgtype.UUID    `json:"program_id"`
+	ProgramKode     string         `json:"program_kode"`
+	ProgramUraian   string         `json:"program_uraian"`
+	KegiatanID      pgtype.UUID    `json:"kegiatan_id"`
+	KegiatanKode    string         `json:"kegiatan_kode"`
+	KegiatanUraian  string         `json:"kegiatan_uraian"`
+	OutputID        pgtype.UUID    `json:"output_id"`
+	OutputKode      string         `json:"output_kode"`
+	OutputUraian    string         `json:"output_uraian"`
+	SubOutputID     pgtype.UUID    `json:"sub_output_id"`
+	SubOutputKode   string         `json:"sub_output_kode"`
+	SubOutputUraian string         `json:"sub_output_uraian"`
+	AkunID          pgtype.UUID    `json:"akun_id"`
+	AkunKode        string         `json:"akun_kode"`
+	AkunUraian      string         `json:"akun_uraian"`
+	Pagu            pgtype.Numeric `json:"pagu"`
+	Realisasi       pgtype.Numeric `json:"realisasi"`
+	Sisa            pgtype.Numeric `json:"sisa"`
 }
 
 func (q *Queries) GetAnggaranTree(ctx context.Context, tahunAnggaran int32) ([]GetAnggaranTreeRow, error) {
@@ -95,8 +95,8 @@ ORDER BY tanggal_sp2d
 `
 
 type GetRealisasiByAkunAndBulanParams struct {
-	AkunID pgtype.UUID
-	Bulan  int32
+	AkunID pgtype.UUID `json:"akun_id"`
+	Bulan  int32       `json:"bulan"`
 }
 
 func (q *Queries) GetRealisasiByAkunAndBulan(ctx context.Context, arg GetRealisasiByAkunAndBulanParams) ([]RealisasiAnggaranSp2d, error) {
@@ -136,13 +136,13 @@ RETURNING id, sub_output_id, kode, uraian, pagu, realisasi, sisa
 `
 
 type InsertAnggaranAkunParams struct {
-	ID          pgtype.UUID
-	SubOutputID pgtype.UUID
-	Kode        string
-	Uraian      string
-	Pagu        pgtype.Numeric
-	Realisasi   pgtype.Numeric
-	Sisa        pgtype.Numeric
+	ID          pgtype.UUID    `json:"id"`
+	SubOutputID pgtype.UUID    `json:"sub_output_id"`
+	Kode        string         `json:"kode"`
+	Uraian      string         `json:"uraian"`
+	Pagu        pgtype.Numeric `json:"pagu"`
+	Realisasi   pgtype.Numeric `json:"realisasi"`
+	Sisa        pgtype.Numeric `json:"sisa"`
 }
 
 func (q *Queries) InsertAnggaranAkun(ctx context.Context, arg InsertAnggaranAkunParams) (AnggaranAkun, error) {
@@ -176,10 +176,10 @@ RETURNING id, program_id, kode, uraian
 `
 
 type InsertAnggaranKegiatanParams struct {
-	ID        pgtype.UUID
-	ProgramID pgtype.UUID
-	Kode      string
-	Uraian    string
+	ID        pgtype.UUID `json:"id"`
+	ProgramID pgtype.UUID `json:"program_id"`
+	Kode      string      `json:"kode"`
+	Uraian    string      `json:"uraian"`
 }
 
 func (q *Queries) InsertAnggaranKegiatan(ctx context.Context, arg InsertAnggaranKegiatanParams) (AnggaranKegiatan, error) {
@@ -207,10 +207,10 @@ RETURNING id, kegiatan_id, kode, uraian
 `
 
 type InsertAnggaranOutputParams struct {
-	ID         pgtype.UUID
-	KegiatanID pgtype.UUID
-	Kode       string
-	Uraian     string
+	ID         pgtype.UUID `json:"id"`
+	KegiatanID pgtype.UUID `json:"kegiatan_id"`
+	Kode       string      `json:"kode"`
+	Uraian     string      `json:"uraian"`
 }
 
 func (q *Queries) InsertAnggaranOutput(ctx context.Context, arg InsertAnggaranOutputParams) (AnggaranOutput, error) {
@@ -238,10 +238,10 @@ RETURNING id, kode, uraian, tahun_anggaran
 `
 
 type InsertAnggaranProgramParams struct {
-	ID            pgtype.UUID
-	Kode          string
-	Uraian        string
-	TahunAnggaran int32
+	ID            pgtype.UUID `json:"id"`
+	Kode          string      `json:"kode"`
+	Uraian        string      `json:"uraian"`
+	TahunAnggaran int32       `json:"tahun_anggaran"`
 }
 
 func (q *Queries) InsertAnggaranProgram(ctx context.Context, arg InsertAnggaranProgramParams) (AnggaranProgram, error) {
@@ -269,10 +269,10 @@ RETURNING id, output_id, kode, uraian
 `
 
 type InsertAnggaranSubOutputParams struct {
-	ID       pgtype.UUID
-	OutputID pgtype.UUID
-	Kode     string
-	Uraian   string
+	ID       pgtype.UUID `json:"id"`
+	OutputID pgtype.UUID `json:"output_id"`
+	Kode     string      `json:"kode"`
+	Uraian   string      `json:"uraian"`
 }
 
 func (q *Queries) InsertAnggaranSubOutput(ctx context.Context, arg InsertAnggaranSubOutputParams) (AnggaranSubOutput, error) {
@@ -299,13 +299,13 @@ RETURNING id, akun_id, bulan, nomor_sp2d, tanggal_sp2d, nilai_cair, keterangan, 
 `
 
 type InsertRealisasiSP2DParams struct {
-	ID          pgtype.UUID
-	AkunID      pgtype.UUID
-	Bulan       int32
-	NomorSp2d   string
-	TanggalSp2d pgtype.Date
-	NilaiCair   pgtype.Numeric
-	Keterangan  pgtype.Text
+	ID          pgtype.UUID    `json:"id"`
+	AkunID      pgtype.UUID    `json:"akun_id"`
+	Bulan       int32          `json:"bulan"`
+	NomorSp2d   string         `json:"nomor_sp2d"`
+	TanggalSp2d pgtype.Date    `json:"tanggal_sp2d"`
+	NilaiCair   pgtype.Numeric `json:"nilai_cair"`
+	Keterangan  pgtype.Text    `json:"keterangan"`
 }
 
 func (q *Queries) InsertRealisasiSP2D(ctx context.Context, arg InsertRealisasiSP2DParams) (RealisasiAnggaranSp2d, error) {

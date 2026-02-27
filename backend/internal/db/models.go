@@ -9,129 +9,129 @@ import (
 )
 
 type ActivityLog struct {
-	ID         pgtype.UUID
-	UserID     pgtype.UUID
-	Action     string
-	TargetType pgtype.Text
-	TargetID   pgtype.UUID
-	Details    []byte
-	IpAddress  pgtype.Text
-	UserAgent  pgtype.Text
-	CreatedAt  pgtype.Timestamptz
+	ID         pgtype.UUID        `json:"id"`
+	UserID     pgtype.UUID        `json:"user_id"`
+	Action     string             `json:"action"`
+	TargetType pgtype.Text        `json:"target_type"`
+	TargetID   pgtype.UUID        `json:"target_id"`
+	Details    []byte             `json:"details"`
+	IpAddress  pgtype.Text        `json:"ip_address"`
+	UserAgent  pgtype.Text        `json:"user_agent"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
 type AnggaranAkun struct {
-	ID          pgtype.UUID
-	SubOutputID pgtype.UUID
-	Kode        string
-	Uraian      string
-	Pagu        pgtype.Numeric
-	Realisasi   pgtype.Numeric
-	Sisa        pgtype.Numeric
+	ID          pgtype.UUID    `json:"id"`
+	SubOutputID pgtype.UUID    `json:"sub_output_id"`
+	Kode        string         `json:"kode"`
+	Uraian      string         `json:"uraian"`
+	Pagu        pgtype.Numeric `json:"pagu"`
+	Realisasi   pgtype.Numeric `json:"realisasi"`
+	Sisa        pgtype.Numeric `json:"sisa"`
 }
 
 type AnggaranKegiatan struct {
-	ID        pgtype.UUID
-	ProgramID pgtype.UUID
-	Kode      string
-	Uraian    string
+	ID        pgtype.UUID `json:"id"`
+	ProgramID pgtype.UUID `json:"program_id"`
+	Kode      string      `json:"kode"`
+	Uraian    string      `json:"uraian"`
 }
 
 type AnggaranOutput struct {
-	ID         pgtype.UUID
-	KegiatanID pgtype.UUID
-	Kode       string
-	Uraian     string
+	ID         pgtype.UUID `json:"id"`
+	KegiatanID pgtype.UUID `json:"kegiatan_id"`
+	Kode       string      `json:"kode"`
+	Uraian     string      `json:"uraian"`
 }
 
 type AnggaranProgram struct {
-	ID            pgtype.UUID
-	Kode          string
-	Uraian        string
-	TahunAnggaran int32
+	ID            pgtype.UUID `json:"id"`
+	Kode          string      `json:"kode"`
+	Uraian        string      `json:"uraian"`
+	TahunAnggaran int32       `json:"tahun_anggaran"`
 }
 
 type AnggaranSubOutput struct {
-	ID       pgtype.UUID
-	OutputID pgtype.UUID
-	Kode     string
-	Uraian   string
+	ID       pgtype.UUID `json:"id"`
+	OutputID pgtype.UUID `json:"output_id"`
+	Kode     string      `json:"kode"`
+	Uraian   string      `json:"uraian"`
 }
 
 type DokumenBukti struct {
-	ID                 pgtype.UUID
-	PaketID            pgtype.UUID
-	Bulan              int32
-	Kategori           string
-	JenisDokumen       string
-	FileHashSha256     string
-	OriginalName       string
-	MimeType           string
-	FileSizeBytes      int64
-	UploadedBy         pgtype.UUID
-	CreatedAt          pgtype.Timestamptz
-	VerificationStatus pgtype.Text
-	VerifiedBy         pgtype.UUID
-	VerifiedAt         pgtype.Timestamptz
-	RejectionReason    pgtype.Text
+	ID                 pgtype.UUID        `json:"id"`
+	PaketID            pgtype.UUID        `json:"paket_id"`
+	Bulan              int32              `json:"bulan"`
+	Kategori           string             `json:"kategori"`
+	JenisDokumen       string             `json:"jenis_dokumen"`
+	FileHashSha256     string             `json:"file_hash_sha256"`
+	OriginalName       string             `json:"original_name"`
+	MimeType           string             `json:"mime_type"`
+	FileSizeBytes      int64              `json:"file_size_bytes"`
+	UploadedBy         pgtype.UUID        `json:"uploaded_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	VerificationStatus pgtype.Text        `json:"verification_status"`
+	VerifiedBy         pgtype.UUID        `json:"verified_by"`
+	VerifiedAt         pgtype.Timestamptz `json:"verified_at"`
+	RejectionReason    pgtype.Text        `json:"rejection_reason"`
 }
 
 type PaketAkunMapping struct {
-	PaketID pgtype.UUID
-	AkunID  pgtype.UUID
+	PaketID pgtype.UUID `json:"paket_id"`
+	AkunID  pgtype.UUID `json:"akun_id"`
 }
 
 type PaketPekerjaan struct {
-	ID        pgtype.UUID
-	NamaPaket string
-	Kasatker  string
-	Lokasi    string
-	PaguPaket pgtype.Numeric
-	Status    string
-	PpkID     pgtype.UUID
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
+	ID        pgtype.UUID        `json:"id"`
+	NamaPaket string             `json:"nama_paket"`
+	Kasatker  string             `json:"kasatker"`
+	Lokasi    string             `json:"lokasi"`
+	PaguPaket pgtype.Numeric     `json:"pagu_paket"`
+	Status    string             `json:"status"`
+	PpkID     pgtype.UUID        `json:"ppk_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type PaketRealisasiFisik struct {
-	ID                 pgtype.UUID
-	PaketID            pgtype.UUID
-	Bulan              int32
-	PersenAktual       pgtype.Numeric
-	CatatanKendala     pgtype.Text
-	UpdatedBy          pgtype.UUID
-	CreatedAt          pgtype.Timestamptz
-	VerificationStatus pgtype.Text
-	VerifiedBy         pgtype.UUID
-	VerifiedAt         pgtype.Timestamptz
-	RejectionReason    pgtype.Text
+	ID                 pgtype.UUID        `json:"id"`
+	PaketID            pgtype.UUID        `json:"paket_id"`
+	Bulan              int32              `json:"bulan"`
+	PersenAktual       pgtype.Numeric     `json:"persen_aktual"`
+	CatatanKendala     pgtype.Text        `json:"catatan_kendala"`
+	UpdatedBy          pgtype.UUID        `json:"updated_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	VerificationStatus pgtype.Text        `json:"verification_status"`
+	VerifiedBy         pgtype.UUID        `json:"verified_by"`
+	VerifiedAt         pgtype.Timestamptz `json:"verified_at"`
+	RejectionReason    pgtype.Text        `json:"rejection_reason"`
 }
 
 type PaketTarget struct {
-	ID             pgtype.UUID
-	PaketID        pgtype.UUID
-	Bulan          int32
-	PersenKeuangan pgtype.Numeric
-	PersenFisik    pgtype.Numeric
+	ID             pgtype.UUID    `json:"id"`
+	PaketID        pgtype.UUID    `json:"paket_id"`
+	Bulan          int32          `json:"bulan"`
+	PersenKeuangan pgtype.Numeric `json:"persen_keuangan"`
+	PersenFisik    pgtype.Numeric `json:"persen_fisik"`
 }
 
 type RealisasiAnggaranSp2d struct {
-	ID          pgtype.UUID
-	AkunID      pgtype.UUID
-	Bulan       int32
-	NomorSp2d   string
-	TanggalSp2d pgtype.Date
-	NilaiCair   pgtype.Numeric
-	Keterangan  pgtype.Text
-	CreatedAt   pgtype.Timestamptz
+	ID          pgtype.UUID        `json:"id"`
+	AkunID      pgtype.UUID        `json:"akun_id"`
+	Bulan       int32              `json:"bulan"`
+	NomorSp2d   string             `json:"nomor_sp2d"`
+	TanggalSp2d pgtype.Date        `json:"tanggal_sp2d"`
+	NilaiCair   pgtype.Numeric     `json:"nilai_cair"`
+	Keterangan  pgtype.Text        `json:"keterangan"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
 type User struct {
-	ID           pgtype.UUID
-	Username     string
-	PasswordHash string
-	FullName     string
-	Role         string
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
+	ID           pgtype.UUID        `json:"id"`
+	Username     string             `json:"username"`
+	PasswordHash string             `json:"password_hash"`
+	FullName     string             `json:"full_name"`
+	Role         string             `json:"role"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }

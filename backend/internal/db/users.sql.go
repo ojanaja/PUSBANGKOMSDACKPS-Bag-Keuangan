@@ -21,11 +21,11 @@ RETURNING id, username, password_hash, full_name, role, created_at, updated_at
 `
 
 type CreateUserParams struct {
-	ID           pgtype.UUID
-	Username     string
-	PasswordHash string
-	FullName     string
-	Role         string
+	ID           pgtype.UUID `json:"id"`
+	Username     string      `json:"username"`
+	PasswordHash string      `json:"password_hash"`
+	FullName     string      `json:"full_name"`
+	Role         string      `json:"role"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
@@ -106,12 +106,12 @@ ORDER BY created_at DESC
 `
 
 type ListUsersRow struct {
-	ID        pgtype.UUID
-	Username  string
-	FullName  string
-	Role      string
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
+	ID        pgtype.UUID        `json:"id"`
+	Username  string             `json:"username"`
+	FullName  string             `json:"full_name"`
+	Role      string             `json:"role"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
@@ -153,10 +153,10 @@ RETURNING id, username, password_hash, full_name, role, created_at, updated_at
 `
 
 type UpdateUserParams struct {
-	ID           pgtype.UUID
-	FullName     string
-	Role         string
-	PasswordHash string
+	ID           pgtype.UUID `json:"id"`
+	FullName     string      `json:"full_name"`
+	Role         string      `json:"role"`
+	PasswordHash string      `json:"password_hash"`
 }
 
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {

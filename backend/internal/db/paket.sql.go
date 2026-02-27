@@ -52,12 +52,12 @@ GROUP BY p.id
 `
 
 type GetComplianceMatrixRow struct {
-	ID                pgtype.UUID
-	NamaPaket         string
-	PaguPaket         pgtype.Numeric
-	PaguAnggaran      pgtype.Numeric
-	RealisasiAnggaran pgtype.Numeric
-	RealisasiFisik    pgtype.Numeric
+	ID                pgtype.UUID    `json:"id"`
+	NamaPaket         string         `json:"nama_paket"`
+	PaguPaket         pgtype.Numeric `json:"pagu_paket"`
+	PaguAnggaran      pgtype.Numeric `json:"pagu_anggaran"`
+	RealisasiAnggaran pgtype.Numeric `json:"realisasi_anggaran"`
+	RealisasiFisik    pgtype.Numeric `json:"realisasi_fisik"`
 }
 
 func (q *Queries) GetComplianceMatrix(ctx context.Context, tahunAnggaran int32) ([]GetComplianceMatrixRow, error) {
@@ -146,18 +146,18 @@ WHERE rf.paket_id = $1 ORDER BY rf.bulan
 `
 
 type GetRealisasiFisikByPaketIDRow struct {
-	ID                 pgtype.UUID
-	PaketID            pgtype.UUID
-	Bulan              int32
-	PersenAktual       pgtype.Numeric
-	CatatanKendala     pgtype.Text
-	UpdatedBy          pgtype.UUID
-	CreatedAt          pgtype.Timestamptz
-	VerificationStatus pgtype.Text
-	VerifiedBy         pgtype.UUID
-	VerifiedAt         pgtype.Timestamptz
-	RejectionReason    pgtype.Text
-	VerifiedByFullName pgtype.Text
+	ID                 pgtype.UUID        `json:"id"`
+	PaketID            pgtype.UUID        `json:"paket_id"`
+	Bulan              int32              `json:"bulan"`
+	PersenAktual       pgtype.Numeric     `json:"persen_aktual"`
+	CatatanKendala     pgtype.Text        `json:"catatan_kendala"`
+	UpdatedBy          pgtype.UUID        `json:"updated_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	VerificationStatus pgtype.Text        `json:"verification_status"`
+	VerifiedBy         pgtype.UUID        `json:"verified_by"`
+	VerifiedAt         pgtype.Timestamptz `json:"verified_at"`
+	RejectionReason    pgtype.Text        `json:"rejection_reason"`
+	VerifiedByFullName pgtype.Text        `json:"verified_by_full_name"`
 }
 
 func (q *Queries) GetRealisasiFisikByPaketID(ctx context.Context, paketID pgtype.UUID) ([]GetRealisasiFisikByPaketIDRow, error) {
@@ -200,8 +200,8 @@ ON CONFLICT DO NOTHING
 `
 
 type InsertPaketAkunMappingParams struct {
-	PaketID pgtype.UUID
-	AkunID  pgtype.UUID
+	PaketID pgtype.UUID `json:"paket_id"`
+	AkunID  pgtype.UUID `json:"akun_id"`
 }
 
 func (q *Queries) InsertPaketAkunMapping(ctx context.Context, arg InsertPaketAkunMappingParams) error {
@@ -216,13 +216,13 @@ RETURNING id, nama_paket, kasatker, lokasi, pagu_paket, status, ppk_id, created_
 `
 
 type InsertPaketPekerjaanParams struct {
-	ID        pgtype.UUID
-	NamaPaket string
-	Kasatker  string
-	Lokasi    string
-	PaguPaket pgtype.Numeric
-	Status    string
-	PpkID     pgtype.UUID
+	ID        pgtype.UUID    `json:"id"`
+	NamaPaket string         `json:"nama_paket"`
+	Kasatker  string         `json:"kasatker"`
+	Lokasi    string         `json:"lokasi"`
+	PaguPaket pgtype.Numeric `json:"pagu_paket"`
+	Status    string         `json:"status"`
+	PpkID     pgtype.UUID    `json:"ppk_id"`
 }
 
 func (q *Queries) InsertPaketPekerjaan(ctx context.Context, arg InsertPaketPekerjaanParams) (PaketPekerjaan, error) {
@@ -258,11 +258,11 @@ RETURNING id, paket_id, bulan, persen_keuangan, persen_fisik
 `
 
 type InsertPaketTargetParams struct {
-	ID             pgtype.UUID
-	PaketID        pgtype.UUID
-	Bulan          int32
-	PersenKeuangan pgtype.Numeric
-	PersenFisik    pgtype.Numeric
+	ID             pgtype.UUID    `json:"id"`
+	PaketID        pgtype.UUID    `json:"paket_id"`
+	Bulan          int32          `json:"bulan"`
+	PersenKeuangan pgtype.Numeric `json:"persen_keuangan"`
+	PersenFisik    pgtype.Numeric `json:"persen_fisik"`
 }
 
 func (q *Queries) InsertPaketTarget(ctx context.Context, arg InsertPaketTargetParams) (PaketTarget, error) {
@@ -325,11 +325,11 @@ WHERE id = $5
 `
 
 type UpdatePaketPekerjaanParams struct {
-	NamaPaket string
-	Kasatker  string
-	Lokasi    string
-	PaguPaket pgtype.Numeric
-	ID        pgtype.UUID
+	NamaPaket string         `json:"nama_paket"`
+	Kasatker  string         `json:"kasatker"`
+	Lokasi    string         `json:"lokasi"`
+	PaguPaket pgtype.Numeric `json:"pagu_paket"`
+	ID        pgtype.UUID    `json:"id"`
 }
 
 func (q *Queries) UpdatePaketPekerjaan(ctx context.Context, arg UpdatePaketPekerjaanParams) error {
@@ -351,12 +351,12 @@ RETURNING id, paket_id, bulan, persen_aktual, catatan_kendala, updated_by, creat
 `
 
 type UpsertRealisasiFisikParams struct {
-	ID             pgtype.UUID
-	PaketID        pgtype.UUID
-	Bulan          int32
-	PersenAktual   pgtype.Numeric
-	CatatanKendala pgtype.Text
-	UpdatedBy      pgtype.UUID
+	ID             pgtype.UUID    `json:"id"`
+	PaketID        pgtype.UUID    `json:"paket_id"`
+	Bulan          int32          `json:"bulan"`
+	PersenAktual   pgtype.Numeric `json:"persen_aktual"`
+	CatatanKendala pgtype.Text    `json:"catatan_kendala"`
+	UpdatedBy      pgtype.UUID    `json:"updated_by"`
 }
 
 func (q *Queries) UpsertRealisasiFisik(ctx context.Context, arg UpsertRealisasiFisikParams) (PaketRealisasiFisik, error) {
@@ -397,10 +397,10 @@ RETURNING id, paket_id, bulan, persen_aktual, catatan_kendala, updated_by, creat
 `
 
 type VerifyRealisasiFisikParams struct {
-	VerificationStatus pgtype.Text
-	VerifiedBy         pgtype.UUID
-	RejectionReason    pgtype.Text
-	ID                 pgtype.UUID
+	VerificationStatus pgtype.Text `json:"verification_status"`
+	VerifiedBy         pgtype.UUID `json:"verified_by"`
+	RejectionReason    pgtype.Text `json:"rejection_reason"`
+	ID                 pgtype.UUID `json:"id"`
 }
 
 func (q *Queries) VerifyRealisasiFisik(ctx context.Context, arg VerifyRealisasiFisikParams) (PaketRealisasiFisik, error) {

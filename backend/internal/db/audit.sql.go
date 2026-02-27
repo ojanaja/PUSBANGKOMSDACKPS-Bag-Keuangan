@@ -32,14 +32,14 @@ RETURNING id, user_id, action, target_type, target_id, details, ip_address, user
 `
 
 type CreateActivityLogParams struct {
-	ID         pgtype.UUID
-	UserID     pgtype.UUID
-	Action     string
-	TargetType pgtype.Text
-	TargetID   pgtype.UUID
-	Details    []byte
-	IpAddress  pgtype.Text
-	UserAgent  pgtype.Text
+	ID         pgtype.UUID `json:"id"`
+	UserID     pgtype.UUID `json:"user_id"`
+	Action     string      `json:"action"`
+	TargetType pgtype.Text `json:"target_type"`
+	TargetID   pgtype.UUID `json:"target_id"`
+	Details    []byte      `json:"details"`
+	IpAddress  pgtype.Text `json:"ip_address"`
+	UserAgent  pgtype.Text `json:"user_agent"`
 }
 
 func (q *Queries) CreateActivityLog(ctx context.Context, arg CreateActivityLogParams) (ActivityLog, error) {
@@ -80,22 +80,22 @@ LIMIT $1 OFFSET $2
 `
 
 type ListActivityLogsParams struct {
-	Limit  int32
-	Offset int32
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
 }
 
 type ListActivityLogsRow struct {
-	ID           pgtype.UUID
-	UserID       pgtype.UUID
-	Action       string
-	TargetType   pgtype.Text
-	TargetID     pgtype.UUID
-	Details      []byte
-	IpAddress    pgtype.Text
-	UserAgent    pgtype.Text
-	CreatedAt    pgtype.Timestamptz
-	UserFullName string
-	UserUsername string
+	ID           pgtype.UUID        `json:"id"`
+	UserID       pgtype.UUID        `json:"user_id"`
+	Action       string             `json:"action"`
+	TargetType   pgtype.Text        `json:"target_type"`
+	TargetID     pgtype.UUID        `json:"target_id"`
+	Details      []byte             `json:"details"`
+	IpAddress    pgtype.Text        `json:"ip_address"`
+	UserAgent    pgtype.Text        `json:"user_agent"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UserFullName string             `json:"user_full_name"`
+	UserUsername string             `json:"user_username"`
 }
 
 func (q *Queries) ListActivityLogs(ctx context.Context, arg ListActivityLogsParams) ([]ListActivityLogsRow, error) {

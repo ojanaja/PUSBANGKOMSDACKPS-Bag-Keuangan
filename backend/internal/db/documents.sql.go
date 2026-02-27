@@ -83,22 +83,22 @@ ORDER BY d.bulan, d.kategori, d.created_at DESC
 `
 
 type GetDocumentsByPaketRow struct {
-	ID                 pgtype.UUID
-	PaketID            pgtype.UUID
-	Bulan              int32
-	Kategori           string
-	JenisDokumen       string
-	FileHashSha256     string
-	OriginalName       string
-	MimeType           string
-	FileSizeBytes      int64
-	UploadedBy         pgtype.UUID
-	CreatedAt          pgtype.Timestamptz
-	VerificationStatus pgtype.Text
-	VerifiedBy         pgtype.UUID
-	VerifiedAt         pgtype.Timestamptz
-	RejectionReason    pgtype.Text
-	VerifiedByFullName pgtype.Text
+	ID                 pgtype.UUID        `json:"id"`
+	PaketID            pgtype.UUID        `json:"paket_id"`
+	Bulan              int32              `json:"bulan"`
+	Kategori           string             `json:"kategori"`
+	JenisDokumen       string             `json:"jenis_dokumen"`
+	FileHashSha256     string             `json:"file_hash_sha256"`
+	OriginalName       string             `json:"original_name"`
+	MimeType           string             `json:"mime_type"`
+	FileSizeBytes      int64              `json:"file_size_bytes"`
+	UploadedBy         pgtype.UUID        `json:"uploaded_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	VerificationStatus pgtype.Text        `json:"verification_status"`
+	VerifiedBy         pgtype.UUID        `json:"verified_by"`
+	VerifiedAt         pgtype.Timestamptz `json:"verified_at"`
+	RejectionReason    pgtype.Text        `json:"rejection_reason"`
+	VerifiedByFullName pgtype.Text        `json:"verified_by_full_name"`
 }
 
 func (q *Queries) GetDocumentsByPaket(ctx context.Context, paketID pgtype.UUID) ([]GetDocumentsByPaketRow, error) {
@@ -147,27 +147,27 @@ ORDER BY d.kategori, d.created_at DESC
 `
 
 type GetDocumentsByPaketAndBulanParams struct {
-	PaketID pgtype.UUID
-	Bulan   int32
+	PaketID pgtype.UUID `json:"paket_id"`
+	Bulan   int32       `json:"bulan"`
 }
 
 type GetDocumentsByPaketAndBulanRow struct {
-	ID                 pgtype.UUID
-	PaketID            pgtype.UUID
-	Bulan              int32
-	Kategori           string
-	JenisDokumen       string
-	FileHashSha256     string
-	OriginalName       string
-	MimeType           string
-	FileSizeBytes      int64
-	UploadedBy         pgtype.UUID
-	CreatedAt          pgtype.Timestamptz
-	VerificationStatus pgtype.Text
-	VerifiedBy         pgtype.UUID
-	VerifiedAt         pgtype.Timestamptz
-	RejectionReason    pgtype.Text
-	VerifiedByFullName pgtype.Text
+	ID                 pgtype.UUID        `json:"id"`
+	PaketID            pgtype.UUID        `json:"paket_id"`
+	Bulan              int32              `json:"bulan"`
+	Kategori           string             `json:"kategori"`
+	JenisDokumen       string             `json:"jenis_dokumen"`
+	FileHashSha256     string             `json:"file_hash_sha256"`
+	OriginalName       string             `json:"original_name"`
+	MimeType           string             `json:"mime_type"`
+	FileSizeBytes      int64              `json:"file_size_bytes"`
+	UploadedBy         pgtype.UUID        `json:"uploaded_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	VerificationStatus pgtype.Text        `json:"verification_status"`
+	VerifiedBy         pgtype.UUID        `json:"verified_by"`
+	VerifiedAt         pgtype.Timestamptz `json:"verified_at"`
+	RejectionReason    pgtype.Text        `json:"rejection_reason"`
+	VerifiedByFullName pgtype.Text        `json:"verified_by_full_name"`
 }
 
 func (q *Queries) GetDocumentsByPaketAndBulan(ctx context.Context, arg GetDocumentsByPaketAndBulanParams) ([]GetDocumentsByPaketAndBulanRow, error) {
@@ -214,16 +214,16 @@ RETURNING id, paket_id, bulan, kategori, jenis_dokumen, file_hash_sha256, origin
 `
 
 type InsertDocumentParams struct {
-	ID             pgtype.UUID
-	PaketID        pgtype.UUID
-	Bulan          int32
-	Kategori       string
-	JenisDokumen   string
-	FileHashSha256 string
-	OriginalName   string
-	MimeType       string
-	FileSizeBytes  int64
-	UploadedBy     pgtype.UUID
+	ID             pgtype.UUID `json:"id"`
+	PaketID        pgtype.UUID `json:"paket_id"`
+	Bulan          int32       `json:"bulan"`
+	Kategori       string      `json:"kategori"`
+	JenisDokumen   string      `json:"jenis_dokumen"`
+	FileHashSha256 string      `json:"file_hash_sha256"`
+	OriginalName   string      `json:"original_name"`
+	MimeType       string      `json:"mime_type"`
+	FileSizeBytes  int64       `json:"file_size_bytes"`
+	UploadedBy     pgtype.UUID `json:"uploaded_by"`
 }
 
 func (q *Queries) InsertDocument(ctx context.Context, arg InsertDocumentParams) (DokumenBukti, error) {
@@ -272,10 +272,10 @@ RETURNING id, paket_id, bulan, kategori, jenis_dokumen, file_hash_sha256, origin
 `
 
 type VerifyDocumentParams struct {
-	VerificationStatus pgtype.Text
-	VerifiedBy         pgtype.UUID
-	RejectionReason    pgtype.Text
-	ID                 pgtype.UUID
+	VerificationStatus pgtype.Text `json:"verification_status"`
+	VerifiedBy         pgtype.UUID `json:"verified_by"`
+	RejectionReason    pgtype.Text `json:"rejection_reason"`
+	ID                 pgtype.UUID `json:"id"`
 }
 
 func (q *Queries) VerifyDocument(ctx context.Context, arg VerifyDocumentParams) (DokumenBukti, error) {
