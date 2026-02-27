@@ -1,0 +1,85 @@
+name: keuangan-pusbangkom-prod
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: keuangan-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    command:
+      - postgres
+      - -c
+      - max_connections=20
+      - -c
+      - shared_buffers=64MB
+      - -c
+      - work_mem=2MB
+      - -c
+      - maintenance_work_mem=32MB
+      - -c
+      - effective_cache_size=256MB
+      - -c
+      - wal_buffers=4MB
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    mem_limit: 320m
+    cpus: 0.70
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: keuangan-backend
+    restart: always
+    environment:
+      DB_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET}
+      CAS_PATH: /app/storage/cas
+      COOKIE_SECURE: "true"
+      COOKIE_SAME_SITE: ${COOKIE_SAME_SITE:-Lax}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS}
+      GOMEMLIMIT: 96MiB
+      GOGC: 100
+    depends_on:
+      - db
+    volumes:
+      - backend_storage:/app/storage
+      - kas_storage:/mnt/nas_data
+    networks:
+      - internal
+    mem_limit: 160m
+    cpus: 0.60
+
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    container_name: keuangan-nginx
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/certs:/etc/nginx/certs:ro
+    networks:
+      - internal
+      - public
+    mem_limit: 80m
+    cpus: 0.30
+
+volumes:
+  db_data:
+  backend_storage:
+  kas_storage:
+
+networks:
+  internal:
+    internal: true
+  public:
