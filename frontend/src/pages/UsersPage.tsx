@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import {
     Users as UsersIcon,
     Plus,
@@ -18,16 +18,11 @@ import { useAuthStore, type UserRole } from '@/stores/authStore'
 import PageHeader from '@/shared/ui/PageHeader'
 import AppTextButton from '@/shared/ui/AppTextButton'
 import AppLoader from '@/shared/ui/AppLoader'
+import ConfirmDialog from '@/shared/ui/ConfirmDialog'
+import { useToast } from '@/shared/hooks/useToast'
+import { useUsers, type UserItem } from '@/features/users/application/useUsers'
 
-interface UserItem {
-    ID: string
-    Username: string
-    FullName: string
-    Role: UserRole
-    CreatedAt: string
-}
-
-const roleConfig: Record<UserRole, { label: string, icon: any, color: string, bg: string }> = {
+const roleConfig: Record<UserRole, { label: string, icon: React.ComponentType<{ size?: number }>, color: string, bg: string }> = {
     SUPER_ADMIN: { label: 'Super Admin', icon: ShieldAlert, color: 'text-purple-700', bg: 'bg-purple-100' },
     ADMIN_KEUANGAN: { label: 'Admin Keuangan', icon: ShieldCheck, color: 'text-blue-700', bg: 'bg-blue-100' },
     PPK: { label: 'PPK', icon: UserCheck, color: 'text-emerald-700', bg: 'bg-emerald-100' },
@@ -36,14 +31,17 @@ const roleConfig: Record<UserRole, { label: string, icon: any, color: string, bg
 
 export default function UsersPage() {
     const currentUser = useAuthStore(s => s.user)
-    const [users, setUsers] = useState<UserItem[]>([])
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
+    const { showToast } = useToast()
     const [search, setSearch] = useState('')
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [editingUser, setEditingUser] = useState<UserItem | null>(null)
-    const [saving, setSaving] = useState(false)
     const [success, setSuccess] = useState<string | null>(null)
+    const [formError, setFormError] = useState<string | null>(null)
+    const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+
+    const { query, saveMutation, deleteMutation } = useUsers()
+    const users = query.data || []
+    const loading = query.isLoading
 
     const [formData, setFormData] = useState({
         username: '',
@@ -52,25 +50,8 @@ export default function UsersPage() {
         role: 'PENGAWAS' as UserRole
     })
 
-    useEffect(() => {
-        fetchUsers()
-    }, [])
-
-    const fetchUsers = async () => {
-        setLoading(true)
-        try {
-            const res = await fetch('/api/v1/users', { credentials: 'include' })
-            if (!res.ok) throw new Error('Gagal mengambil daftar pengguna')
-            const data = await res.json()
-            setUsers(data || [])
-        } catch (e) {
-            setError(e instanceof Error ? e.message : 'Terjadi kesalahan')
-        } finally {
-            setLoading(false)
-        }
-    }
-
     const handleOpenModal = (user: UserItem | null = null) => {
+        setFormError(null)
         if (user) {
             setEditingUser(user)
             setFormData({
@@ -93,50 +74,31 @@ export default function UsersPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        setSaving(true)
-        setError(null)
+        setFormError(null)
         try {
-            const url = editingUser ? `/api/v1/users/${editingUser.ID}` : '/api/v1/users'
-            const method = editingUser ? 'PUT' : 'POST'
-
-            const res = await fetch(url, {
-                method,
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify(formData)
-            })
-
-            if (!res.ok) {
-                const data = await res.json().catch(() => ({}))
-                throw new Error(data.message || 'Gagal menyimpan data pengguna')
-            }
-
+            await saveMutation.mutateAsync({ id: editingUser?.ID, data: formData })
             setSuccess(editingUser ? 'Data pengguna berhasil diperbarui' : 'Pengguna baru berhasil ditambahkan')
             setIsModalOpen(false)
-            fetchUsers()
             setTimeout(() => setSuccess(null), 3000)
         } catch (e) {
-            setError(e instanceof Error ? e.message : 'Terjadi kesalahan')
-        } finally {
-            setSaving(false)
+            setFormError(e instanceof Error ? e.message : 'Terjadi kesalahan')
         }
     }
 
     const handleDelete = async (id: string) => {
-        if (!confirm('Apakah Anda yakin ingin menghapus pengguna ini?')) return
+        setDeleteTarget(id)
+    }
 
+    const confirmDelete = async () => {
+        if (!deleteTarget) return
         try {
-            const res = await fetch(`/api/v1/users/${id}`, {
-                method: 'DELETE',
-                credentials: 'include'
-            })
-            if (!res.ok) throw new Error('Gagal menghapus pengguna')
-
+            await deleteMutation.mutateAsync(deleteTarget)
             setSuccess('Pengguna berhasil dihapus')
-            fetchUsers()
             setTimeout(() => setSuccess(null), 3000)
         } catch (e) {
-            setError(e instanceof Error ? e.message : 'Terjadi kesalahan')
+            showToast(e instanceof Error ? e.message : 'Terjadi kesalahan', 'error')
+        } finally {
+            setDeleteTarget(null)
         }
     }
 
@@ -196,8 +158,9 @@ export default function UsersPage() {
                         </div>
                     ) : (
                         <table className="w-full text-sm">
+                            <caption className="sr-only">Daftar Pengguna</caption>
                             <thead>
-                                <tr className="bg-slate-50 text-left text-slate-500 font-semibold border-b border-slate-100">
+                                <tr>
                                     <th className="px-6 py-4">Nama Lengkap / Username</th>
                                     <th className="px-6 py-4">Role</th>
                                     <th className="px-6 py-4">Tanggal Dibuat</th>
@@ -255,109 +218,122 @@ export default function UsersPage() {
                             </tbody>
                         </table>
                     )}
-                </div>
             </div>
+        </div>
 
-            {isModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-                        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0">
-                            <h3 className="text-lg font-bold text-slate-900 font-outfit">
-                                {editingUser ? 'Edit Pengguna' : 'Tambah Pengguna Baru'}
-                            </h3>
-                            <button onClick={() => setIsModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg transition-colors">
-                                <X size={20} />
-                            </button>
+            {
+        isModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                    <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0">
+                        <h3 className="text-lg font-bold text-slate-900 font-outfit">
+                            {editingUser ? 'Edit Pengguna' : 'Tambah Pengguna Baru'}
+                        </h3>
+                        <button onClick={() => setIsModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg transition-colors">
+                            <X size={20} />
+                        </button>
+                    </div>
+
+                    <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                        {formError && (
+                            <div className="p-3 bg-red-50 border border-red-100 text-red-600 text-sm rounded-lg flex items-center gap-2">
+                                <AlertCircle size={16} />
+                                {formError}
+                            </div>
+                        )}
+
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Username</label>
+                            <input
+                                type="text"
+                                required
+                                disabled={editingUser !== null}
+                                className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:bg-slate-50 disabled:text-slate-400 font-mono"
+                                placeholder="username"
+                                value={formData.username}
+                                onChange={e => setFormData({ ...formData, username: e.target.value })}
+                            />
                         </div>
 
-                        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-                            {error && (
-                                <div className="p-3 bg-red-50 border border-red-100 text-red-600 text-sm rounded-lg flex items-center gap-2">
-                                    <AlertCircle size={16} />
-                                    {error}
-                                </div>
-                            )}
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Nama Lengkap</label>
+                            <input
+                                type="text"
+                                required
+                                className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                                placeholder="Nama Lengkap"
+                                value={formData.full_name}
+                                onChange={e => setFormData({ ...formData, full_name: e.target.value })}
+                            />
+                        </div>
 
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Username</label>
-                                <input
-                                    type="text"
-                                    required
-                                    disabled={editingUser !== null}
-                                    className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:bg-slate-50 disabled:text-slate-400 font-mono"
-                                    placeholder="username"
-                                    value={formData.username}
-                                    onChange={e => setFormData({ ...formData, username: e.target.value })}
-                                />
-                            </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">
+                                {editingUser ? 'Ganti Password (Kosongkan jika tidak)' : 'Password'}
+                            </label>
+                            <input
+                                type="password"
+                                required={!editingUser}
+                                className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                                placeholder="••••••••"
+                                value={formData.password}
+                                onChange={e => setFormData({ ...formData, password: e.target.value })}
+                            />
+                        </div>
 
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Nama Lengkap</label>
-                                <input
-                                    type="text"
-                                    required
-                                    className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                                    placeholder="Nama Lengkap"
-                                    value={formData.full_name}
-                                    onChange={e => setFormData({ ...formData, full_name: e.target.value })}
-                                />
-                            </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Role / Peran</label>
+                            <select
+                                className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 appearance-none bg-white"
+                                value={formData.role}
+                                onChange={e => setFormData({ ...formData, role: e.target.value as UserRole })}
+                            >
+                                <option value="SUPER_ADMIN">Super Admin</option>
+                                <option value="ADMIN_KEUANGAN">Admin Keuangan</option>
+                                <option value="PPK">PPK (Pejabat Pembuat Komitmen)</option>
+                                <option value="PENGAWAS">Pengawas / Pemeriksa</option>
+                            </select>
+                        </div>
 
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">
-                                    {editingUser ? 'Ganti Password (Kosongkan jika tidak)' : 'Password'}
-                                </label>
-                                <input
-                                    type="password"
-                                    required={!editingUser}
-                                    className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                                    placeholder="••••••••"
-                                    value={formData.password}
-                                    onChange={e => setFormData({ ...formData, password: e.target.value })}
-                                />
-                            </div>
-
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Role / Peran</label>
-                                <select
-                                    className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 appearance-none bg-white"
-                                    value={formData.role}
-                                    onChange={e => setFormData({ ...formData, role: e.target.value as UserRole })}
-                                >
-                                    <option value="SUPER_ADMIN">Super Admin</option>
-                                    <option value="ADMIN_KEUANGAN">Admin Keuangan</option>
-                                    <option value="PPK">PPK (Pejabat Pembuat Komitmen)</option>
-                                    <option value="PENGAWAS">Pengawas / Pemeriksa</option>
-                                </select>
-                            </div>
-
-                            <div className="pt-4 flex gap-3">
-                                <button
-                                    type="button"
-                                    onClick={() => setIsModalOpen(false)}
-                                    className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-50 transition-all"
-                                >
-                                    Batal
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={saving}
-                                    className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-600/20 flex items-center justify-center gap-2"
-                                >
-                                    {saving ? (
-                                        <>
-                                            <Loader2 size={16} className="animate-spin" />
-                                            Menyimpan...
-                                        </>
-                                    ) : (
-                                        'Simpan Data'
-                                    )}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
+                        <div className="pt-4 flex gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setIsModalOpen(false)}
+                                className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-50 transition-all"
+                            >
+                                Batal
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={saveMutation.isPending}
+                                className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-600/20 flex items-center justify-center gap-2"
+                            >
+                                {saveMutation.isPending ? (
+                                    <>
+                                        <Loader2 size={16} className="animate-spin" />
+                                        Menyimpan...
+                                    </>
+                                ) : (
+                                    'Simpan Data'
+                                )}
+                            </button>
+                        </div>
+                    </form>
                 </div>
-            )}
-        </div>
+            </div>
+        )
+    }
+
+    <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Hapus Pengguna?"
+        message="Apakah Anda yakin ingin menghapus pengguna ini? Tindakan ini tidak dapat dibatalkan."
+        confirmLabel="Hapus"
+        variant="danger"
+        loading={deleteMutation.isPending}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+    />
+        </div >
     )
 }
