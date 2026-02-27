@@ -1,27 +1,29 @@
-import { useCallback, useMemo, useState } from 'react'
-import { HttpNotificationRepository } from '@/features/notifications/data/httpNotificationRepository'
-import type { EwsNotification } from '@/features/notifications/domain/entities'
+import { useQuery } from '@tanstack/react-query'
+import { apiGet } from '@/shared/api/httpClient'
 
-export function useNotifications() {
-    const repository = useMemo(() => new HttpNotificationRepository(), [])
-    const [notifications, setNotifications] = useState<EwsNotification[]>([])
-    const [isLoading, setIsLoading] = useState(false)
+export interface EwsNotification {
+    id: string
+    title: string
+    detail: string
+    time: string
+    type: 'critical' | 'warning' | 'info'
+    paket_id?: string
+}
 
-    const fetchNotifications = useCallback(async () => {
-        setIsLoading(true)
-        try {
-            const latest = await repository.getLatest()
-            setNotifications(latest)
-        } catch {
-            setNotifications([])
-        } finally {
-            setIsLoading(false)
-        }
-    }, [repository])
+export function useNotifications(enabled = true) {
+    const query = useQuery<EwsNotification[]>({
+        queryKey: ['notifications'],
+        queryFn: async () => {
+            const result = await apiGet<EwsNotification[]>('/dashboard/notifications')
+            return Array.isArray(result) ? result : []
+        },
+        enabled,
+    })
 
     return {
-        notifications,
-        isLoading,
-        fetchNotifications,
+        notifications: query.data ?? [],
+        isLoading: query.isLoading,
+        refetch: query.refetch,
+        query,
     }
 }
