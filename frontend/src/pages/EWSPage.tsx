@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
     ShieldAlert,
     AlertTriangle,
@@ -12,16 +12,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import PageHeader from '@/shared/ui/PageHeader'
 import AppLoader from '@/shared/ui/AppLoader'
-
-interface EWSItem {
-    paket_id: string
-    nama_paket: string
-    status: 'TIDAK_LENGKAP' | 'PERINGATAN' | 'LENGKAP'
-    alasan: string
-    deviasi_fisik: number
-    realisasi_keuangan_persen: number
-    realisasi_fisik_persen: number
-}
+import { useEWS, type EWSItem } from '@/features/ews/application/useEWS'
 
 const statusBadgeClass: Record<EWSItem['status'], string> = {
     TIDAK_LENGKAP: 'bg-red-100 text-red-600',
@@ -36,30 +27,12 @@ const statusLabel: Record<EWSItem['status'], string> = {
 }
 
 export default function EWSPage() {
-    const [data, setData] = useState<EWSItem[]>([])
-    const [loading, setLoading] = useState(true)
     const [tahun, setTahun] = useState(new Date().getFullYear())
     const [searchTerm, setSearchTerm] = useState('')
     const navigate = useNavigate()
 
-    const fetchData = async () => {
-        setLoading(true)
-        try {
-            const res = await fetch(`/api/v1/dashboard/ews?tahun=${tahun}`, { credentials: 'include' })
-            if (res.ok) {
-                const json = await res.json()
-                setData(json || [])
-            }
-        } catch (err) {
-            console.error('Gagal mengambil data EWS', err)
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    useEffect(() => {
-        fetchData()
-    }, [tahun])
+    const { data: ewsData, isLoading: loading } = useEWS(tahun)
+    const data = ewsData || []
 
     const filteredData = data.filter(item =>
         item.nama_paket.toLowerCase().includes(searchTerm.toLowerCase())
