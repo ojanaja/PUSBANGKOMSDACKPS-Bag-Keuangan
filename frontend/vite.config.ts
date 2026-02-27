@@ -11,6 +11,19 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    target: 'es2020',
+    cssMinify: 'lightningcss',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-router': ['react-router-dom'],
+          'vendor-query': ['@tanstack/react-query'],
+          'vendor-recharts': ['recharts'],
+        },
+      },
+    },
+  },
   server: {
     proxy: {
       '/api': {

@@ -11,7 +11,6 @@ import {
 } from 'lucide-react'
 import { useAuthStore, type UserRole } from '@/stores/authStore'
 import { useSidebarStore } from '@/stores/sidebarStore'
-import { IconButton } from '@mui/material'
 
 interface NavItem {
     label: string
@@ -67,6 +66,7 @@ export default function Sidebar() {
 
     return (
         <aside
+            aria-label="Navigasi utama"
             className={`fixed top-0 left-0 h-screen bg-sidebar text-white flex flex-col transition-all duration-300 z-40 ${isCollapsed ? 'w-[72px]' : 'w-[250px]'
                 }`}
         >
@@ -84,7 +84,7 @@ export default function Sidebar() {
                 )}
             </div>
 
-            <nav className="flex-1 py-4 overflow-y-auto">
+            <nav className="flex-1 py-4 overflow-y-auto" aria-label="Menu utama">
                 <ul className="space-y-1 px-2">
                     {filteredNav.map((item) => (
                         <li key={item.path}>
@@ -108,9 +108,12 @@ export default function Sidebar() {
             </nav>
 
             <div className="h-12 border-t border-white/10 flex items-center justify-center">
-                <IconButton size="small" sx={{ color: '#94a3b8' }} onClick={toggle}>
+                <button
+                    className="p-1.5 rounded-lg text-slate-400 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+                    onClick={toggle}
+                >
                     {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-                </IconButton>
+                </button>
             </div>
         </aside>
     )

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { apiFetch } from '@/shared/api/httpClient'
 
 export type UserRole = 'SUPER_ADMIN' | 'ADMIN_KEUANGAN' | 'PPK' | 'PENGAWAS'
 
@@ -20,8 +21,6 @@ interface AuthState {
     checkAuth: () => Promise<void>
 }
 
-const API_BASE = '/api/v1/auth'
-
 export const useAuthStore = create<AuthState>((set) => ({
     user: null,
     isAuthenticated: false,
@@ -32,10 +31,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     login: async (username: string, password: string) => {
         set({ isLoading: true, error: null })
         try {
-            const res = await fetch(`${API_BASE}/login`, {
+            const res = await apiFetch('/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
                 body: JSON.stringify({ username, password }),
             })
 
@@ -67,9 +65,8 @@ export const useAuthStore = create<AuthState>((set) => ({
 
     logout: async () => {
         try {
-            await fetch(`${API_BASE}/logout`, {
+            await apiFetch('/auth/logout', {
                 method: 'POST',
-                credentials: 'include',
             })
         } catch {
         }
@@ -82,9 +79,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
         set({ isLoading: true })
         try {
-            const res = await fetch(`${API_BASE}/me`, {
-                credentials: 'include',
-            })
+            const res = await apiFetch('/auth/me')
 
             if (!res.ok) {
                 set({ user: null, isAuthenticated: false, isLoading: false, isInitialized: true })

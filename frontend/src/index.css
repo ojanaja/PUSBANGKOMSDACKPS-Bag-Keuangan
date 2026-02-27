@@ -17,12 +17,62 @@
   --color-sidebar-active: #334155;
   --color-content-bg: #f8fafc;
 
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
 }
 
 @layer base {
   body {
     @apply font-sans bg-content-bg text-slate-800 antialiased;
     margin: 0;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+  }
+  .p-6,
+  .p-8 {
+    padding: 0 !important;
+  }
+  .space-y-6 > * + * {
+    margin-top: 2rem !important;
+  }
+  .bg-white {
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: none !important;
+  }
+  .rounded-2xl {
+    border-radius: 0.5rem !important;
+  }
+  .shadow-sm {
+    box-shadow: none !important;
+  }
+  .h-\[450px\] {
+    height: 500px !important;
+  }
+  .grid-cols-4 {
+    grid-template-columns: repeat(4, 1fr) !important;
+  }
+  table {
+    page-break-inside: auto;
+  }
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+  thead {
+    display: table-header-group;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
   }
 }

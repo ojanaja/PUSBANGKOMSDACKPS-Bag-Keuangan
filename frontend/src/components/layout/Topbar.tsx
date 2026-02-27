@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { useSidebarStore } from '@/stores/sidebarStore'
 import { useState, useRef, useEffect } from 'react'
-import { Badge, IconButton, Menu, MenuItem, Paper, Tooltip, Typography } from '@mui/material'
 import AppTextButton from '@/shared/ui/AppTextButton'
 import { useNotifications } from '@/features/notifications/application/useNotifications'
 
@@ -16,6 +15,40 @@ const breadcrumbMap: Record<string, string> = {
     '/audit-trail': 'Jejak Audit',
 }
 
+const dynamicBreadcrumbs: Array<{ pattern: RegExp; resolve: (path: string) => { label: string; parent?: { label: string; path: string } } }> = [
+    {
+        pattern: /^\/progres\/[^/]+$/,
+        resolve: () => ({ label: 'Detail Progres', parent: { label: 'Progres Satker', path: '/progres-satker' } }),
+    },
+    {
+        pattern: /^\/kurva-s\/[^/]+$/,
+        resolve: () => ({ label: 'Kurva-S', parent: { label: 'Progres Satker', path: '/progres-satker' } }),
+    },
+]
+
+function resolveBreadcrumbs(pathname: string) {
+    const crumbs = [{ label: 'Beranda', path: '/' }]
+
+    for (const { pattern, resolve } of dynamicBreadcrumbs) {
+        if (pattern.test(pathname)) {
+            const { label, parent } = resolve(pathname)
+            if (parent) crumbs.push(parent)
+            crumbs.push({ label, path: pathname })
+            return crumbs
+        }
+    }
+
+    const pathParts = pathname.split('/').filter(Boolean)
+    let accumulated = ''
+    for (const part of pathParts) {
+        accumulated += `/${part}`
+        if (breadcrumbMap[accumulated]) {
+            crumbs.push({ label: breadcrumbMap[accumulated], path: accumulated })
+        }
+    }
+    return crumbs
+}
+
 export default function Topbar() {
     const location = useLocation()
     const user = useAuthStore((s) => s.user)
@@ -26,7 +59,7 @@ export default function Topbar() {
     const [showProfileMenu, setShowProfileMenu] = useState(false)
     const notificationRef = useRef<HTMLDivElement>(null)
     const profileRef = useRef<HTMLDivElement>(null)
-    const { notifications, isLoading, fetchNotifications } = useNotifications()
+    const { notifications, isLoading } = useNotifications()
 
     useEffect(() => {
         function handleClick(e: MouseEvent) {
@@ -41,28 +74,14 @@ export default function Topbar() {
         return () => document.removeEventListener('mousedown', handleClick)
     }, [])
 
-    useEffect(() => {
-        if (showNotifications) {
-            fetchNotifications()
-        }
-    }, [showNotifications, fetchNotifications])
-
-    const pathParts = location.pathname.split('/').filter(Boolean)
-    const crumbs = [{ label: 'Beranda', path: '/' }]
-    let accumulated = ''
-    for (const part of pathParts) {
-        accumulated += `/${part}`
-        if (breadcrumbMap[accumulated]) {
-            crumbs.push({ label: breadcrumbMap[accumulated], path: accumulated })
-        }
-    }
+    const crumbs = resolveBreadcrumbs(location.pathname)
 
     return (
         <header
             className={`fixed top-0 right-0 h-[60px] bg-white border-b border-slate-200 flex items-center justify-between px-6 z-30 transition-all duration-300 ${isCollapsed ? 'left-[72px]' : 'left-[250px]'
                 }`}
         >
-            <nav className="flex items-center gap-1 text-sm text-slate-500">
+            <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-sm text-slate-500">
                 {crumbs.map((crumb, i) => (
                     <span key={crumb.path} className="flex items-center gap-1">
                         {i > 0 && <ChevronRight size={14} className="text-slate-300" />}
@@ -75,18 +94,23 @@ export default function Topbar() {
 
             <div className="flex items-center gap-3">
                 <div className="relative" ref={notificationRef}>
-                    <Tooltip title="Notifikasi">
-                        <IconButton size="small" onClick={() => setShowNotifications(!showNotifications)}>
-                            <Badge color="error" badgeContent={notifications.length} max={99}>
-                                <Bell size={18} />
-                            </Badge>
-                        </IconButton>
-                    </Tooltip>
+                    <button
+                        title="Notifikasi"
+                        className="relative p-2 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                        onClick={() => setShowNotifications(!showNotifications)}
+                    >
+                        <Bell size={18} />
+                        {notifications.length > 0 && (
+                            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold leading-none px-1">
+                                {notifications.length > 99 ? '99+' : notifications.length}
+                            </span>
+                        )}
+                    </button>
 
                     {showNotifications && (
-                        <Paper className="absolute right-0 top-full mt-2 w-80 border border-slate-200 overflow-hidden z-50">
+                        <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl border border-slate-200 overflow-hidden z-50 shadow-lg">
                             <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                                <Typography variant="subtitle2" fontWeight={700}>Pusat Notifikasi</Typography>
+                                <span className="text-sm font-bold text-slate-800">Pusat Notifikasi</span>
                                 {notifications.length > 0 ? <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-bold">{notifications.length} baru</span> : null}
                             </div>
                             <div className="max-h-96 overflow-y-auto">
@@ -129,7 +153,7 @@ export default function Topbar() {
                                     }}
                                 />
                             </div>
-                        </Paper>
+                        </div>
                     )}
                 </div>
 
@@ -147,23 +171,21 @@ export default function Topbar() {
                         </div>
                     </button>
 
-                    <Menu
-                        open={showProfileMenu}
-                        onClose={() => setShowProfileMenu(false)}
-                        anchorEl={profileRef.current}
-                        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-                        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-                    >
-                        <MenuItem
-                            onClick={async () => {
-                                await logout()
-                                navigate('/login', { replace: true })
-                            }}
-                        >
-                            <LogOut size={16} className="mr-2" />
-                            Keluar
-                        </MenuItem>
-                    </Menu>
+                    {showProfileMenu && (
+                        <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-lg border border-slate-200 shadow-lg z-50 py-1">
+                            <button
+                                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+                                onClick={async () => {
+                                    setShowProfileMenu(false)
+                                    await logout()
+                                    navigate('/login', { replace: true })
+                                }}
+                            >
+                                <LogOut size={16} />
+                                Keluar
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         </header>
