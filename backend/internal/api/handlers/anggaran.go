@@ -3,14 +3,20 @@ package handlers
 import (
 	"fmt"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"strconv"
 
+	"github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/db"
+	"github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/services"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/labstack/echo/v4"
-	"github.com/vandal/keuangan-pusbangkom/internal/db"
-	"github.com/vandal/keuangan-pusbangkom/internal/services"
 )
+
+var openMultipartFile = func(fileHeader *multipart.FileHeader) (multipart.File, error) {
+	return fileHeader.Open()
+}
 
 func (h *Handler) ImportAnggaranData(ctx echo.Context) error {
 	file, err := ctx.FormFile("file")
@@ -23,18 +29,39 @@ func (h *Handler) ImportAnggaranData(ctx echo.Context) error {
 		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "tahun_anggaran must be an integer"})
 	}
 
-	src, err := file.Open()
+	src, err := openMultipartFile(file)
 	if err != nil {
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to open file"})
 	}
 	defer src.Close()
 
-	rows, err := services.ParseAnggaranCSV(src)
+	reqCtx := ctx.Request().Context()
+	tx, err := h.pool.Begin(reqCtx)
 	if err != nil {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": fmt.Sprintf("CSV parse error: %s", err)})
+		slog.Error("Begin tx failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to import data"})
+	}
+	defer func() {
+		_ = tx.Rollback(reqCtx)
+	}()
+	qtx := h.queries.WithTx(tx)
+
+	if _, err := tx.Exec(reqCtx, `
+		DROP TABLE IF EXISTS anggaran_akun_import;
+		CREATE TEMP TABLE anggaran_akun_import (
+			id uuid NOT NULL,
+			sub_output_id uuid NOT NULL,
+			kode text NOT NULL,
+			uraian text NOT NULL,
+			pagu numeric NOT NULL,
+			realisasi numeric NOT NULL,
+			sisa numeric NOT NULL
+		) ON COMMIT DROP;
+	`); err != nil {
+		slog.Error("create temp import table failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to import data"})
 	}
 
-	reqCtx := ctx.Request().Context()
 	programCount, akunCount := 0, 0
 
 	programIDs := make(map[string]pgtype.UUID)
@@ -42,15 +69,34 @@ func (h *Handler) ImportAnggaranData(ctx echo.Context) error {
 	outputIDs := make(map[string]pgtype.UUID)
 	subOutputIDs := make(map[string]pgtype.UUID)
 
-	for _, row := range rows {
+	const akunCopyBatchSize = 2000
+	copyRows := make([][]any, 0, akunCopyBatchSize)
+	flushAkunCopy := func() error {
+		if len(copyRows) == 0 {
+			return nil
+		}
+		_, err := tx.CopyFrom(
+			reqCtx,
+			pgx.Identifier{"anggaran_akun_import"},
+			[]string{"id", "sub_output_id", "kode", "uraian", "pagu", "realisasi", "sisa"},
+			pgx.CopyFromRows(copyRows),
+		)
+		if err != nil {
+			return err
+		}
+		copyRows = copyRows[:0]
+		return nil
+	}
+
+	_, err = services.ParseAnggaranCSVStream(src, func(row services.AnggaranRow) error {
 		if _, exists := programIDs[row.ProgramKode]; !exists {
 			uid := newPgUUID()
-			p, err := h.queries.InsertAnggaranProgram(reqCtx, db.InsertAnggaranProgramParams{
+			p, err := qtx.InsertAnggaranProgram(reqCtx, db.InsertAnggaranProgramParams{
 				ID: uid, Kode: row.ProgramKode, Uraian: row.ProgramUraian, TahunAnggaran: int32(tahun),
 			})
 			if err != nil {
 				slog.Error("InsertAnggaranProgram failed", "error", err, "kode", row.ProgramKode)
-				continue
+				return err
 			}
 			programIDs[row.ProgramKode] = p.ID
 			programCount++
@@ -58,55 +104,87 @@ func (h *Handler) ImportAnggaranData(ctx echo.Context) error {
 
 		if _, exists := kegiatanIDs[row.KegiatanKode]; !exists {
 			uid := newPgUUID()
-			k, err := h.queries.InsertAnggaranKegiatan(reqCtx, db.InsertAnggaranKegiatanParams{
+			k, err := qtx.InsertAnggaranKegiatan(reqCtx, db.InsertAnggaranKegiatanParams{
 				ID: uid, ProgramID: programIDs[row.ProgramKode], Kode: row.KegiatanKode, Uraian: row.KegiatanUraian,
 			})
 			if err != nil {
 				slog.Error("InsertAnggaranKegiatan failed", "error", err, "kode", row.KegiatanKode)
-				continue
+				return err
 			}
 			kegiatanIDs[row.KegiatanKode] = k.ID
 		}
 
 		if _, exists := outputIDs[row.OutputKode]; !exists {
 			uid := newPgUUID()
-			o, err := h.queries.InsertAnggaranOutput(reqCtx, db.InsertAnggaranOutputParams{
+			o, err := qtx.InsertAnggaranOutput(reqCtx, db.InsertAnggaranOutputParams{
 				ID: uid, KegiatanID: kegiatanIDs[row.KegiatanKode], Kode: row.OutputKode, Uraian: row.OutputUraian,
 			})
 			if err != nil {
 				slog.Error("InsertAnggaranOutput failed", "error", err, "kode", row.OutputKode)
-				continue
+				return err
 			}
 			outputIDs[row.OutputKode] = o.ID
 		}
 
 		if _, exists := subOutputIDs[row.SubOutputKode]; !exists {
 			uid := newPgUUID()
-			so, err := h.queries.InsertAnggaranSubOutput(reqCtx, db.InsertAnggaranSubOutputParams{
+			so, err := qtx.InsertAnggaranSubOutput(reqCtx, db.InsertAnggaranSubOutputParams{
 				ID: uid, OutputID: outputIDs[row.OutputKode], Kode: row.SubOutputKode, Uraian: row.SubOutputUraian,
 			})
 			if err != nil {
 				slog.Error("InsertAnggaranSubOutput failed", "error", err, "kode", row.SubOutputKode)
-				continue
+				return err
 			}
 			subOutputIDs[row.SubOutputKode] = so.ID
 		}
 
-		uid := newPgUUID()
-		_, err = h.queries.InsertAnggaranAkun(reqCtx, db.InsertAnggaranAkunParams{
-			ID:          uid,
-			SubOutputID: subOutputIDs[row.SubOutputKode],
-			Kode:        row.AkunKode,
-			Uraian:      row.AkunUraian,
-			Pagu:        float64ToNumeric(row.Pagu),
-			Realisasi:   float64ToNumeric(row.Realisasi),
-			Sisa:        float64ToNumeric(row.Sisa),
+		copyRows = append(copyRows, []any{
+			newPgUUID(),
+			subOutputIDs[row.SubOutputKode],
+			row.AkunKode,
+			row.AkunUraian,
+			mustDecimalNumeric(row.Pagu),
+			mustDecimalNumeric(row.Realisasi),
+			mustDecimalNumeric(row.Sisa),
 		})
-		if err != nil {
-			slog.Error("InsertAnggaranAkun failed", "error", err, "kode", row.AkunKode)
-			continue
+		if len(copyRows) >= akunCopyBatchSize {
+			if err := flushAkunCopy(); err != nil {
+				slog.Error("bulk copy akun failed", "error", err)
+				return err
+			}
 		}
 		akunCount++
+		return nil
+	})
+	if err != nil {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": fmt.Sprintf("CSV parse error: %s", err)})
+	}
+
+	if err := flushAkunCopy(); err != nil {
+		slog.Error("bulk copy akun flush failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to import data"})
+	}
+
+	if _, err := tx.Exec(reqCtx, `
+		INSERT INTO anggaran_akun (id, sub_output_id, kode, uraian, pagu, realisasi, sisa)
+		SELECT DISTINCT ON (kode)
+			id, sub_output_id, kode, uraian, pagu, realisasi, sisa
+		FROM anggaran_akun_import
+		ORDER BY kode, id
+		ON CONFLICT (kode) DO UPDATE SET
+			uraian = EXCLUDED.uraian,
+			sub_output_id = EXCLUDED.sub_output_id,
+			pagu = EXCLUDED.pagu,
+			realisasi = EXCLUDED.realisasi,
+			sisa = EXCLUDED.sisa;
+	`); err != nil {
+		slog.Error("merge akun import failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to import data"})
+	}
+
+	if err := tx.Commit(reqCtx); err != nil {
+		slog.Error("Commit tx failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to import data"})
 	}
 
 	return ctx.JSON(http.StatusOK, AnggaranImportResult{
@@ -165,9 +243,9 @@ func (h *Handler) CreateManualAnggaran(ctx echo.Context) error {
 		SubOutputID: so.ID,
 		Kode:        body.AkunKode,
 		Uraian:      body.AkunUraian,
-		Pagu:        float64ToNumeric(float64(body.Pagu)),
-		Realisasi:   float64ToNumeric(float64(body.Realisasi)),
-		Sisa:        float64ToNumeric(float64(body.Sisa)),
+		Pagu:        mustDecimalNumeric(body.Pagu),
+		Realisasi:   mustDecimalNumeric(body.Realisasi),
+		Sisa:        mustDecimalNumeric(body.Sisa),
 	})
 	if err != nil {
 		slog.Error("InsertAnggaranAkun manual failed", "error", err)
@@ -175,6 +253,14 @@ func (h *Handler) CreateManualAnggaran(ctx echo.Context) error {
 	}
 
 	return ctx.JSON(http.StatusCreated, map[string]string{"message": "Akun Anggaran berhasil ditambahkan"})
+}
+
+func mustDecimalNumeric(s string) pgtype.Numeric {
+	n, err := decimalStringToNumeric(s)
+	if err != nil {
+		return float64ToNumeric(0)
+	}
+	return n
 }
 
 func (h *Handler) GetAnggaranTree(ctx echo.Context, params GetAnggaranTreeParams) error {

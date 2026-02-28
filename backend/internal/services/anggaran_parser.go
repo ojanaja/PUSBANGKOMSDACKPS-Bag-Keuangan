@@ -4,9 +4,8 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
-	"math"
+	"math/big"
 	"regexp"
-	"strconv"
 	"strings"
 )
 
@@ -23,9 +22,9 @@ type AnggaranRow struct {
 	SubOutputUraian string
 	AkunKode        string
 	AkunUraian      string
-	Pagu            float64
-	Realisasi       float64
-	Sisa            float64
+	Pagu            string
+	Realisasi       string
+	Sisa            string
 }
 
 func ParseAnggaranCSV(r io.Reader) ([]AnggaranRow, error) {
@@ -101,9 +100,18 @@ func ParseAnggaranCSV(r io.Reader) ([]AnggaranRow, error) {
 			subOutputUraian = lastNonEmpty.SubOutputUraian
 		}
 
-		pagu := parseFlexibleNumber(getCell(record, colIndex, "pagu"))
-		realisasi := parseFlexibleNumber(getCell(record, colIndex, "realisasi"))
-		sisa := parseFlexibleNumber(getCell(record, colIndex, "sisa"))
+		pagu, err := parseFlexibleDecimal(getCell(record, colIndex, "pagu"))
+		if err != nil {
+			return nil, fmt.Errorf("invalid pagu at CSV line %d: %w", lineNum, err)
+		}
+		realisasi, err := parseFlexibleDecimal(getCell(record, colIndex, "realisasi"))
+		if err != nil {
+			return nil, fmt.Errorf("invalid realisasi at CSV line %d: %w", lineNum, err)
+		}
+		sisa, err := parseFlexibleDecimal(getCell(record, colIndex, "sisa"))
+		if err != nil {
+			return nil, fmt.Errorf("invalid sisa at CSV line %d: %w", lineNum, err)
+		}
 
 		if programKode == "" || kegiatanKode == "" || outputKode == "" || subOutputKode == "" || akunKode == "" {
 			return nil, fmt.Errorf("invalid hierarchy/code at CSV line %d", lineNum)
@@ -144,6 +152,136 @@ func ParseAnggaranCSV(r io.Reader) ([]AnggaranRow, error) {
 	return rows, nil
 }
 
+func ParseAnggaranCSVStream(r io.Reader, handle func(AnggaranRow) error) (int, error) {
+	reader := csv.NewReader(r)
+	reader.TrimLeadingSpace = true
+	reader.LazyQuotes = true
+
+	header, err := reader.Read()
+	if err != nil {
+		return 0, fmt.Errorf("failed to read CSV header: %w", err)
+	}
+
+	colIndex := make(map[string]int)
+	for i, col := range header {
+		colIndex[normalizeHeader(col)] = i
+	}
+
+	requiredCols := []string{"programkode", "programuraian", "kegiatankode", "kegiatanuraian",
+		"outputkode", "outputuraian", "suboutputkode", "suboutputuraian",
+		"akunkode", "akunuraian", "pagu", "realisasi", "sisa"}
+	for _, col := range requiredCols {
+		if _, ok := colIndex[col]; !ok {
+			return 0, fmt.Errorf("missing required column: %s", col)
+		}
+	}
+
+	count := 0
+	var lastNonEmpty AnggaranRow
+	lineNum := 1
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return count, fmt.Errorf("error reading CSV line %d: %w", lineNum+1, err)
+		}
+		lineNum++
+
+		programKode := normalizeValue(getCell(record, colIndex, "programkode"))
+		programUraian := normalizeValue(getCell(record, colIndex, "programuraian"))
+		kegiatanKode := normalizeValue(getCell(record, colIndex, "kegiatankode"))
+		kegiatanUraian := normalizeValue(getCell(record, colIndex, "kegiatanuraian"))
+		outputKode := normalizeValue(getCell(record, colIndex, "outputkode"))
+		outputUraian := normalizeValue(getCell(record, colIndex, "outputuraian"))
+		subOutputKode := normalizeValue(getCell(record, colIndex, "suboutputkode"))
+		subOutputUraian := normalizeValue(getCell(record, colIndex, "suboutputuraian"))
+		akunKode := normalizeValue(getCell(record, colIndex, "akunkode"))
+		akunUraian := normalizeValue(getCell(record, colIndex, "akunuraian"))
+
+		if programKode == "" {
+			programKode = lastNonEmpty.ProgramKode
+		}
+		if programUraian == "" {
+			programUraian = lastNonEmpty.ProgramUraian
+		}
+		if kegiatanKode == "" {
+			kegiatanKode = lastNonEmpty.KegiatanKode
+		}
+		if kegiatanUraian == "" {
+			kegiatanUraian = lastNonEmpty.KegiatanUraian
+		}
+		if outputKode == "" {
+			outputKode = lastNonEmpty.OutputKode
+		}
+		if outputUraian == "" {
+			outputUraian = lastNonEmpty.OutputUraian
+		}
+		if subOutputKode == "" {
+			subOutputKode = lastNonEmpty.SubOutputKode
+		}
+		if subOutputUraian == "" {
+			subOutputUraian = lastNonEmpty.SubOutputUraian
+		}
+
+		pagu, err := parseFlexibleDecimal(getCell(record, colIndex, "pagu"))
+		if err != nil {
+			return count, fmt.Errorf("invalid pagu at CSV line %d: %w", lineNum, err)
+		}
+		realisasi, err := parseFlexibleDecimal(getCell(record, colIndex, "realisasi"))
+		if err != nil {
+			return count, fmt.Errorf("invalid realisasi at CSV line %d: %w", lineNum, err)
+		}
+		sisa, err := parseFlexibleDecimal(getCell(record, colIndex, "sisa"))
+		if err != nil {
+			return count, fmt.Errorf("invalid sisa at CSV line %d: %w", lineNum, err)
+		}
+
+		if programKode == "" || kegiatanKode == "" || outputKode == "" || subOutputKode == "" || akunKode == "" {
+			return count, fmt.Errorf("invalid hierarchy/code at CSV line %d", lineNum)
+		}
+
+		row := AnggaranRow{
+			ProgramKode:     programKode,
+			ProgramUraian:   programUraian,
+			KegiatanKode:    kegiatanKode,
+			KegiatanUraian:  kegiatanUraian,
+			OutputKode:      outputKode,
+			OutputUraian:    outputUraian,
+			SubOutputKode:   subOutputKode,
+			SubOutputUraian: subOutputUraian,
+			AkunKode:        akunKode,
+			AkunUraian:      akunUraian,
+			Pagu:            pagu,
+			Realisasi:       realisasi,
+			Sisa:            sisa,
+		}
+
+		if err := handle(row); err != nil {
+			return count, fmt.Errorf("error handling CSV line %d: %w", lineNum, err)
+		}
+		count++
+
+		lastNonEmpty = AnggaranRow{
+			ProgramKode:     programKode,
+			ProgramUraian:   programUraian,
+			KegiatanKode:    kegiatanKode,
+			KegiatanUraian:  kegiatanUraian,
+			OutputKode:      outputKode,
+			OutputUraian:    outputUraian,
+			SubOutputKode:   subOutputKode,
+			SubOutputUraian: subOutputUraian,
+		}
+	}
+
+	if count == 0 {
+		return 0, fmt.Errorf("CSV file contains no data rows")
+	}
+
+	return count, nil
+}
+
 func normalizeHeader(input string) string {
 	cleaned := strings.ToLower(strings.TrimSpace(input))
 	cleaned = strings.ReplaceAll(cleaned, " ", "")
@@ -168,10 +306,10 @@ func getCell(record []string, colIndex map[string]int, key string) string {
 	return record[idx]
 }
 
-func parseFlexibleNumber(raw string) float64 {
+func parseFlexibleDecimal(raw string) (string, error) {
 	value := strings.TrimSpace(raw)
 	if value == "" || value == "-" {
-		return 0
+		return "0", nil
 	}
 
 	value = strings.ReplaceAll(value, "Rp", "")
@@ -190,12 +328,20 @@ func parseFlexibleNumber(raw string) float64 {
 		value = strings.ReplaceAll(value, ",", ".")
 	}
 
-	parsed, err := strconv.ParseFloat(value, 64)
-	if err != nil {
-		return 0
+	if value == "" || value == "." || value == "-" || value == "-." {
+		return "0", nil
 	}
-	if math.IsNaN(parsed) || math.IsInf(parsed, 0) {
-		return 0
+	if strings.HasPrefix(value, ".") {
+		value = "0" + value
 	}
-	return parsed
+	if strings.HasPrefix(value, "-.") {
+		value = "-0" + value[1:]
+	}
+
+	var rat big.Rat
+	if _, ok := rat.SetString(value); !ok {
+		return "", fmt.Errorf("invalid decimal: %q", raw)
+	}
+
+	return value, nil
 }
