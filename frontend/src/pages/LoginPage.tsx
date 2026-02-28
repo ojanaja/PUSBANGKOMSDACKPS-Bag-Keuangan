@@ -109,7 +109,7 @@ export default function LoginPage() {
                                 fullWidth
                                 label={isLoading ? 'Memverifikasi akun...' : 'Masuk ke portal'}
                                 icon={isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : undefined}
-                                sx={{ py: 1.5, fontWeight: 700 }}
+                                className="py-3.5 font-bold rounded-2xl"
                             />
                         </div>
                     </form>

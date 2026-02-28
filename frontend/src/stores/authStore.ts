@@ -68,7 +68,8 @@ export const useAuthStore = create<AuthState>((set) => ({
             await apiFetch('/auth/logout', {
                 method: 'POST',
             })
-        } catch {
+        } catch (error) {
+            void error
         }
         set({ user: null, isAuthenticated: false, isLoading: false, error: null })
     },

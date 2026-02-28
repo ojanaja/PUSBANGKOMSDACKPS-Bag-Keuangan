@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { apiUrl, apiGet, apiPost, apiPut, apiDelete, apiFetch } from '@/shared/api/httpClient'
 
 const mockFetch = vi.fn()
