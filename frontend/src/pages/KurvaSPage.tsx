@@ -11,6 +11,7 @@ import { useKurvaS } from '@/features/kurvas/application/useKurvaS'
 import { MONTHS_SHORT } from '@/shared/config/months'
 
 const monthsShort = MONTHS_SHORT
+type MonthShort = (typeof MONTHS_SHORT)[number]
 
 export default function KurvaSPage() {
     const { id } = useParams()
@@ -23,13 +24,18 @@ export default function KurvaSPage() {
     const chartData = data?.chartData || []
     const error = queryError instanceof Error ? queryError.message : null
 
-    const handleChartClick = (data: { activePayload?: Array<{ payload?: { bulan: string } }> }) => {
-        if (data?.activePayload?.[0]?.payload) {
-            const payload = data.activePayload[0].payload
-            const mIndex = monthsShort.indexOf(payload.bulan)
-            setSelectedMonth(mIndex)
-            setDrawerOpen(true)
-        }
+    const handleChartClick = (state: unknown) => {
+        const activePayload = (state as { activePayload?: Array<{ payload?: { bulan?: string } }> })?.activePayload
+        const bulan = activePayload?.[0]?.payload?.bulan
+        if (!bulan) return
+
+        if (!monthsShort.includes(bulan as MonthShort)) return
+
+        const mIndex = monthsShort.indexOf(bulan as MonthShort)
+        if (mIndex < 0) return
+
+        setSelectedMonth(mIndex)
+        setDrawerOpen(true)
     }
 
     if (loading) return <AppLoader label="Menghitung proyeksi kurva-S..." />

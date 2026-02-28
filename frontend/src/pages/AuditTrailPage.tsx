@@ -116,7 +116,7 @@ export default function AuditTrailPage() {
                                         <td className="px-6 py-4 max-w-xs">
                                             {log.details ? (
                                                 <div className="flex flex-wrap gap-1">
-                                                    {Object.entries(log.details).map(([k, v]: [string, any]) => (
+                                                    {Object.entries(log.details as Record<string, unknown>).map(([k, v]) => (
                                                         <span key={k} className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">
                                                             <span className="font-bold">{k}:</span> {String(v)}
                                                         </span>

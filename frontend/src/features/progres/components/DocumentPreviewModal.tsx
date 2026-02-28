@@ -56,12 +56,13 @@ export default function DocumentPreviewModal({ doc, onClose }: DocumentPreviewMo
     const mime = effectiveMime(rawMime, name)
     const docUrl = apiUrl(`/documents/${docId}`)
     const downloadUrl = apiUrl(`/documents/${docId}?download=true`)
+    const previewUrl = `${docUrl}?v=${encodeURIComponent(String(docId))}`
 
     const renderPreview = () => {
         if (isImage(mime)) {
             return (
                 <img
-                    src={`${docUrl}?t=${Date.now()}`}
+                    src={previewUrl}
                     alt={name}
                     className="max-w-full max-h-full object-contain shadow-lg rounded"
                 />
@@ -71,7 +72,7 @@ export default function DocumentPreviewModal({ doc, onClose }: DocumentPreviewMo
         if (isPdf(mime)) {
             return (
                 <iframe
-                    src={`${docUrl}?t=${Date.now()}`}
+                    src={previewUrl}
                     className="w-full h-full shadow-lg rounded bg-white"
                     title={name}
                 />
@@ -81,7 +82,7 @@ export default function DocumentPreviewModal({ doc, onClose }: DocumentPreviewMo
         if (isCsv(mime)) {
             return (
                 <iframe
-                    src={`${docUrl}?t=${Date.now()}`}
+                    src={previewUrl}
                     className="w-full h-full shadow-lg rounded bg-white font-mono text-sm"
                     title={name}
                 />

@@ -54,21 +54,21 @@ export function buildTree(rows: AnggaranTreeRow[]): TreeNode[] {
     const programMap = new Map<string, TreeNode>()
 
     for (const row of rows) {
-        const ProgramID = row.ProgramID || row.program_id;
-        const ProgramKode = row.ProgramKode || row.program_kode;
-        const ProgramUraian = row.ProgramUraian || row.program_uraian;
-        const KegiatanID = row.KegiatanID || row.kegiatan_id;
-        const KegiatanKode = row.KegiatanKode || row.kegiatan_kode;
-        const KegiatanUraian = row.KegiatanUraian || row.kegiatan_uraian;
-        const OutputID = row.OutputID || row.output_id;
-        const OutputKode = row.OutputKode || row.output_kode;
-        const OutputUraian = row.OutputUraian || row.output_uraian;
-        const SubOutputID = row.SubOutputID || row.sub_output_id;
-        const SubOutputKode = row.SubOutputKode || row.sub_output_kode;
-        const SubOutputUraian = row.SubOutputUraian || row.sub_output_uraian;
-        const AkunID = row.AkunID || row.akun_id;
-        const AkunKode = row.AkunKode || row.akun_kode;
-        const AkunUraian = row.AkunUraian || row.akun_uraian;
+        const ProgramID = row.ProgramID ?? row.program_id
+        const ProgramKode = row.ProgramKode ?? row.program_kode ?? ''
+        const ProgramUraian = row.ProgramUraian ?? row.program_uraian ?? ''
+        const KegiatanID = row.KegiatanID ?? row.kegiatan_id
+        const KegiatanKode = row.KegiatanKode ?? row.kegiatan_kode ?? ''
+        const KegiatanUraian = row.KegiatanUraian ?? row.kegiatan_uraian ?? ''
+        const OutputID = row.OutputID ?? row.output_id
+        const OutputKode = row.OutputKode ?? row.output_kode ?? ''
+        const OutputUraian = row.OutputUraian ?? row.output_uraian ?? ''
+        const SubOutputID = row.SubOutputID ?? row.sub_output_id
+        const SubOutputKode = row.SubOutputKode ?? row.sub_output_kode ?? ''
+        const SubOutputUraian = row.SubOutputUraian ?? row.sub_output_uraian ?? ''
+        const AkunID = row.AkunID ?? row.akun_id
+        const AkunKode = row.AkunKode ?? row.akun_kode ?? ''
+        const AkunUraian = row.AkunUraian ?? row.akun_uraian ?? ''
 
         const rawPagu = row.Pagu ?? row.pagu
         const pagu = typeof rawPagu === 'number' ? rawPagu : (parseFloat(String(rawPagu)) || 0)
@@ -77,7 +77,7 @@ export function buildTree(rows: AnggaranTreeRow[]): TreeNode[] {
         const rawSisa = row.Sisa ?? row.sisa
         const sisa = typeof rawSisa === 'number' ? rawSisa : (parseFloat(String(rawSisa)) || 0)
 
-        if (!ProgramID) continue;
+        if (!ProgramID) continue
 
         if (!programMap.has(ProgramID)) {
             programMap.set(ProgramID, {
@@ -101,7 +101,7 @@ export function buildTree(rows: AnggaranTreeRow[]): TreeNode[] {
             }
             program.children!.push(kegiatan)
         }
-        if (!kegiatan) continue;
+        if (!kegiatan) continue
 
         let output = kegiatan.children!.find(o => o.id === OutputID)
         if (!output && OutputID) {
@@ -114,7 +114,7 @@ export function buildTree(rows: AnggaranTreeRow[]): TreeNode[] {
             }
             kegiatan.children!.push(output)
         }
-        if (!output) continue;
+        if (!output) continue
 
         let subOutput = output.children!.find(s => s.id === SubOutputID)
         if (!subOutput && SubOutputID) {
@@ -127,7 +127,7 @@ export function buildTree(rows: AnggaranTreeRow[]): TreeNode[] {
             }
             output.children!.push(subOutput)
         }
-        if (!subOutput) continue;
+        if (!subOutput) continue
 
         const existingAkun = subOutput.children!.find(a => a.id === AkunID)
         if (existingAkun) {
@@ -180,7 +180,7 @@ export function useAnggaran(tahun: number) {
             formData.append('file', file)
             formData.append('tahun', tahun.toString())
 
-            return apiPost('/anggaran/import', formData)
+            return apiPost<{ programs_upserted?: number; akun_upserted?: number }>('/anggaran/import', formData)
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['anggaran'] })
