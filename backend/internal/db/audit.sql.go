@@ -68,6 +68,19 @@ func (q *Queries) CreateActivityLog(ctx context.Context, arg CreateActivityLogPa
 	return i, err
 }
 
+const deleteActivityLogsBefore = `-- name: DeleteActivityLogsBefore :execrows
+DELETE FROM activity_logs
+WHERE created_at < $1
+`
+
+func (q *Queries) DeleteActivityLogsBefore(ctx context.Context, createdAt pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteActivityLogsBefore, createdAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const listActivityLogs = `-- name: ListActivityLogs :many
 SELECT 
     al.id, al.user_id, al.action, al.target_type, al.target_id, al.details, al.ip_address, al.user_agent, al.created_at,

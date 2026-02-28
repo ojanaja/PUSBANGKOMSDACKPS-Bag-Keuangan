@@ -87,6 +87,97 @@ func (q *Queries) GetComplianceMatrix(ctx context.Context, tahunAnggaran int32) 
 	return items, nil
 }
 
+const getComplianceMatrixPaged = `-- name: GetComplianceMatrixPaged :many
+SELECT
+    p.id,
+    p.nama_paket,
+    p.pagu_paket,
+    COALESCE(ang.pagu_anggaran, 0)::numeric as pagu_anggaran,
+    COALESCE(ang.realisasi_anggaran, 0)::numeric as realisasi_anggaran,
+    COALESCE(rf.realisasi_fisik, 0)::numeric as realisasi_fisik
+FROM paket_pekerjaan p
+LEFT JOIN LATERAL (
+    SELECT
+        COALESCE(SUM(aa.pagu), 0)::numeric as pagu_anggaran,
+        COALESCE(SUM(aa.realisasi), 0)::numeric as realisasi_anggaran
+    FROM paket_akun_mapping pam
+    LEFT JOIN anggaran_akun aa ON aa.id = pam.akun_id
+    LEFT JOIN anggaran_sub_output aso ON aa.sub_output_id = aso.id
+    LEFT JOIN anggaran_output ao ON aso.output_id = ao.id
+    LEFT JOIN anggaran_kegiatan ak ON ao.kegiatan_id = ak.id
+    LEFT JOIN anggaran_program apr ON ak.program_id = apr.id
+    WHERE pam.paket_id = p.id
+      AND (apr.tahun_anggaran = $1 OR $1 = 0 OR apr.tahun_anggaran IS NULL)
+) ang ON true
+LEFT JOIN LATERAL (
+    SELECT COALESCE(MAX(rf.persen_aktual), 0)::numeric as realisasi_fisik
+    FROM paket_realisasi_fisik rf
+    WHERE rf.paket_id = p.id
+) rf ON true
+WHERE (
+    $1 = 0
+    OR NOT EXISTS (
+        SELECT 1 FROM paket_akun_mapping pam0
+        WHERE pam0.paket_id = p.id
+    )
+    OR EXISTS (
+        SELECT 1
+        FROM paket_akun_mapping pam1
+        LEFT JOIN anggaran_akun aa1 ON aa1.id = pam1.akun_id
+        LEFT JOIN anggaran_sub_output aso1 ON aa1.sub_output_id = aso1.id
+        LEFT JOIN anggaran_output ao1 ON aso1.output_id = ao1.id
+        LEFT JOIN anggaran_kegiatan ak1 ON ao1.kegiatan_id = ak1.id
+        LEFT JOIN anggaran_program apr1 ON ak1.program_id = apr1.id
+        WHERE pam1.paket_id = p.id
+          AND (apr1.tahun_anggaran = $1 OR apr1.tahun_anggaran IS NULL)
+    )
+)
+ORDER BY p.created_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type GetComplianceMatrixPagedParams struct {
+	TahunAnggaran int32 `json:"tahun_anggaran"`
+	Limit         int32 `json:"limit"`
+	Offset        int32 `json:"offset"`
+}
+
+type GetComplianceMatrixPagedRow struct {
+	ID                pgtype.UUID    `json:"id"`
+	NamaPaket         string         `json:"nama_paket"`
+	PaguPaket         pgtype.Numeric `json:"pagu_paket"`
+	PaguAnggaran      pgtype.Numeric `json:"pagu_anggaran"`
+	RealisasiAnggaran pgtype.Numeric `json:"realisasi_anggaran"`
+	RealisasiFisik    pgtype.Numeric `json:"realisasi_fisik"`
+}
+
+func (q *Queries) GetComplianceMatrixPaged(ctx context.Context, arg GetComplianceMatrixPagedParams) ([]GetComplianceMatrixPagedRow, error) {
+	rows, err := q.db.Query(ctx, getComplianceMatrixPaged, arg.TahunAnggaran, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetComplianceMatrixPagedRow
+	for rows.Next() {
+		var i GetComplianceMatrixPagedRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.NamaPaket,
+			&i.PaguPaket,
+			&i.PaguAnggaran,
+			&i.RealisasiAnggaran,
+			&i.RealisasiFisik,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getPaketPekerjaanByID = `-- name: GetPaketPekerjaanByID :one
 SELECT id, nama_paket, kasatker, lokasi, pagu_paket, status, ppk_id, created_at, updated_at FROM paket_pekerjaan WHERE id = $1
 `
@@ -114,6 +205,39 @@ SELECT id, paket_id, bulan, persen_keuangan, persen_fisik FROM paket_target WHER
 
 func (q *Queries) GetPaketTargetsByPaketID(ctx context.Context, paketID pgtype.UUID) ([]PaketTarget, error) {
 	rows, err := q.db.Query(ctx, getPaketTargetsByPaketID, paketID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PaketTarget
+	for rows.Next() {
+		var i PaketTarget
+		if err := rows.Scan(
+			&i.ID,
+			&i.PaketID,
+			&i.Bulan,
+			&i.PersenKeuangan,
+			&i.PersenFisik,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getPaketTargetsByPaketIDs = `-- name: GetPaketTargetsByPaketIDs :many
+SELECT id, paket_id, bulan, persen_keuangan, persen_fisik
+FROM paket_target
+WHERE paket_id = ANY($1::uuid[])
+ORDER BY paket_id, bulan
+`
+
+func (q *Queries) GetPaketTargetsByPaketIDs(ctx context.Context, dollar_1 []pgtype.UUID) ([]PaketTarget, error) {
+	rows, err := q.db.Query(ctx, getPaketTargetsByPaketIDs, dollar_1)
 	if err != nil {
 		return nil, err
 	}
@@ -169,6 +293,62 @@ func (q *Queries) GetRealisasiFisikByPaketID(ctx context.Context, paketID pgtype
 	var items []GetRealisasiFisikByPaketIDRow
 	for rows.Next() {
 		var i GetRealisasiFisikByPaketIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PaketID,
+			&i.Bulan,
+			&i.PersenAktual,
+			&i.CatatanKendala,
+			&i.UpdatedBy,
+			&i.CreatedAt,
+			&i.VerificationStatus,
+			&i.VerifiedBy,
+			&i.VerifiedAt,
+			&i.RejectionReason,
+			&i.VerifiedByFullName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getRealisasiFisikByPaketIDs = `-- name: GetRealisasiFisikByPaketIDs :many
+SELECT rf.id, rf.paket_id, rf.bulan, rf.persen_aktual, rf.catatan_kendala, rf.updated_by, rf.created_at, rf.verification_status, rf.verified_by, rf.verified_at, rf.rejection_reason, u.full_name as verified_by_full_name
+FROM paket_realisasi_fisik rf
+LEFT JOIN users u ON u.id = rf.verified_by
+WHERE rf.paket_id = ANY($1::uuid[])
+ORDER BY rf.paket_id, rf.bulan
+`
+
+type GetRealisasiFisikByPaketIDsRow struct {
+	ID                 pgtype.UUID        `json:"id"`
+	PaketID            pgtype.UUID        `json:"paket_id"`
+	Bulan              int32              `json:"bulan"`
+	PersenAktual       pgtype.Numeric     `json:"persen_aktual"`
+	CatatanKendala     pgtype.Text        `json:"catatan_kendala"`
+	UpdatedBy          pgtype.UUID        `json:"updated_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	VerificationStatus pgtype.Text        `json:"verification_status"`
+	VerifiedBy         pgtype.UUID        `json:"verified_by"`
+	VerifiedAt         pgtype.Timestamptz `json:"verified_at"`
+	RejectionReason    pgtype.Text        `json:"rejection_reason"`
+	VerifiedByFullName pgtype.Text        `json:"verified_by_full_name"`
+}
+
+func (q *Queries) GetRealisasiFisikByPaketIDs(ctx context.Context, dollar_1 []pgtype.UUID) ([]GetRealisasiFisikByPaketIDsRow, error) {
+	rows, err := q.db.Query(ctx, getRealisasiFisikByPaketIDs, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetRealisasiFisikByPaketIDsRow
+	for rows.Next() {
+		var i GetRealisasiFisikByPaketIDsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.PaketID,
@@ -320,14 +500,19 @@ func (q *Queries) ListPaketPekerjaan(ctx context.Context) ([]PaketPekerjaan, err
 
 const updatePaketPekerjaan = `-- name: UpdatePaketPekerjaan :exec
 UPDATE paket_pekerjaan
-SET nama_paket = $1, kasatker = $2, lokasi = $3, pagu_paket = $4, updated_at = CURRENT_TIMESTAMP
+SET
+    nama_paket = COALESCE($1, nama_paket),
+    kasatker = COALESCE($2, kasatker),
+    lokasi = COALESCE($3, lokasi),
+    pagu_paket = COALESCE($4, pagu_paket),
+    updated_at = CURRENT_TIMESTAMP
 WHERE id = $5
 `
 
 type UpdatePaketPekerjaanParams struct {
-	NamaPaket string         `json:"nama_paket"`
-	Kasatker  string         `json:"kasatker"`
-	Lokasi    string         `json:"lokasi"`
+	NamaPaket pgtype.Text    `json:"nama_paket"`
+	Kasatker  pgtype.Text    `json:"kasatker"`
+	Lokasi    pgtype.Text    `json:"lokasi"`
 	PaguPaket pgtype.Numeric `json:"pagu_paket"`
 	ID        pgtype.UUID    `json:"id"`
 }

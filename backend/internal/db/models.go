@@ -126,6 +126,12 @@ type RealisasiAnggaranSp2d struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
+type RevokedToken struct {
+	TokenSha256 string             `json:"token_sha256"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	RevokedAt   pgtype.Timestamptz `json:"revoked_at"`
+}
+
 type User struct {
 	ID           pgtype.UUID        `json:"id"`
 	Username     string             `json:"username"`

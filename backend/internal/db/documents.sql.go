@@ -207,6 +207,70 @@ func (q *Queries) GetDocumentsByPaketAndBulan(ctx context.Context, arg GetDocume
 	return items, nil
 }
 
+const getDocumentsByPaketIDs = `-- name: GetDocumentsByPaketIDs :many
+SELECT d.id, d.paket_id, d.bulan, d.kategori, d.jenis_dokumen, d.file_hash_sha256, d.original_name, d.mime_type, d.file_size_bytes, d.uploaded_by, d.created_at, d.verification_status, d.verified_by, d.verified_at, d.rejection_reason, u.full_name as verified_by_full_name
+FROM dokumen_bukti d
+LEFT JOIN users u ON u.id = d.verified_by
+WHERE d.paket_id = ANY($1::uuid[])
+ORDER BY d.paket_id, d.bulan, d.kategori, d.created_at DESC
+`
+
+type GetDocumentsByPaketIDsRow struct {
+	ID                 pgtype.UUID        `json:"id"`
+	PaketID            pgtype.UUID        `json:"paket_id"`
+	Bulan              int32              `json:"bulan"`
+	Kategori           string             `json:"kategori"`
+	JenisDokumen       string             `json:"jenis_dokumen"`
+	FileHashSha256     string             `json:"file_hash_sha256"`
+	OriginalName       string             `json:"original_name"`
+	MimeType           string             `json:"mime_type"`
+	FileSizeBytes      int64              `json:"file_size_bytes"`
+	UploadedBy         pgtype.UUID        `json:"uploaded_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	VerificationStatus pgtype.Text        `json:"verification_status"`
+	VerifiedBy         pgtype.UUID        `json:"verified_by"`
+	VerifiedAt         pgtype.Timestamptz `json:"verified_at"`
+	RejectionReason    pgtype.Text        `json:"rejection_reason"`
+	VerifiedByFullName pgtype.Text        `json:"verified_by_full_name"`
+}
+
+func (q *Queries) GetDocumentsByPaketIDs(ctx context.Context, dollar_1 []pgtype.UUID) ([]GetDocumentsByPaketIDsRow, error) {
+	rows, err := q.db.Query(ctx, getDocumentsByPaketIDs, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetDocumentsByPaketIDsRow
+	for rows.Next() {
+		var i GetDocumentsByPaketIDsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PaketID,
+			&i.Bulan,
+			&i.Kategori,
+			&i.JenisDokumen,
+			&i.FileHashSha256,
+			&i.OriginalName,
+			&i.MimeType,
+			&i.FileSizeBytes,
+			&i.UploadedBy,
+			&i.CreatedAt,
+			&i.VerificationStatus,
+			&i.VerifiedBy,
+			&i.VerifiedAt,
+			&i.RejectionReason,
+			&i.VerifiedByFullName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertDocument = `-- name: InsertDocument :one
 INSERT INTO dokumen_bukti (id, paket_id, bulan, kategori, jenis_dokumen, file_hash_sha256, original_name, mime_type, file_size_bytes, uploaded_by)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)

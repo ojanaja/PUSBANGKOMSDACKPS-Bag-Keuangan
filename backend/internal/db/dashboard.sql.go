@@ -28,38 +28,40 @@ paket_filtered AS (
 ),
 paket_totals AS (
     SELECT 
-        COALESCE(SUM(pagu_paket), 0) as total_pagu,
+        COALESCE(SUM(pagu_paket), 0::numeric) as total_pagu,
         COUNT(*) as total_count
     FROM paket_filtered
 ),
 realisasi_fisik_agg AS (
     SELECT
         rf.bulan,
-        SUM(rf.persen_aktual) / GREATEST(NULLIF((SELECT total_count FROM paket_totals), 0), 1) as avg_realisasi_fisik
+        (COALESCE(SUM(rf.persen_aktual), 0::numeric) / GREATEST(NULLIF(pt.total_count, 0), 1))::numeric as avg_realisasi_fisik
     FROM paket_realisasi_fisik rf
-    WHERE rf.paket_id IN (SELECT id FROM paket_filtered)
-    GROUP BY rf.bulan
+    JOIN paket_filtered pf ON rf.paket_id = pf.id
+    CROSS JOIN paket_totals pt
+    GROUP BY rf.bulan, pt.total_count
 ),
 target_fisik_agg AS (
     SELECT
         tf.bulan,
-        SUM(tf.persen_fisik) / GREATEST(NULLIF((SELECT total_count FROM paket_totals), 0), 1) as avg_target_fisik
+        (COALESCE(SUM(tf.persen_fisik), 0::numeric) / GREATEST(NULLIF(pt.total_count, 0), 1))::numeric as avg_target_fisik
     FROM paket_target tf
-    WHERE tf.paket_id IN (SELECT id FROM paket_filtered)
-    GROUP BY tf.bulan
+    JOIN paket_filtered pf ON tf.paket_id = pf.id
+    CROSS JOIN paket_totals pt
+    GROUP BY tf.bulan, pt.total_count
 ),
 target_keuangan_agg AS (
     SELECT
         tf.bulan,
-        SUM(tf.persen_keuangan * p.pagu_paket / 100.0) as sum_target_keuangan
+        COALESCE(SUM(tf.persen_keuangan * p.pagu_paket / 100.0), 0::numeric)::numeric as sum_target_keuangan
     FROM paket_target tf
     JOIN paket_filtered p ON tf.paket_id = p.id
     GROUP BY tf.bulan
 ),
 sp2d_bulanan AS (
     SELECT 
-        EXTRACT(MONTH FROM ras.tanggal_sp2d) as bulan,
-        SUM(ras.nilai_cair) as total_realisasi_keuangan
+        ras.bulan as bulan,
+        COALESCE(SUM(ras.nilai_cair), 0::numeric)::numeric as total_realisasi_keuangan
     FROM realisasi_anggaran_sp2d ras
     JOIN anggaran_akun aa ON ras.akun_id = aa.id
     JOIN anggaran_sub_output aso ON aa.sub_output_id = aso.id
@@ -67,22 +69,22 @@ sp2d_bulanan AS (
     JOIN anggaran_kegiatan ak ON ao.kegiatan_id = ak.id
     JOIN anggaran_program apr ON ak.program_id = apr.id
     WHERE (apr.tahun_anggaran = $1 OR $1 = 0)
-    GROUP BY EXTRACT(MONTH FROM ras.tanggal_sp2d)
+    GROUP BY ras.bulan
 ),
 sp2d_kumulatif AS (
     SELECT 
         m.bulan,
-        SUM(COALESCE(s.total_realisasi_keuangan, 0)) OVER (ORDER BY m.bulan) as kumulatif_realisasi_keuangan
+        (SUM(COALESCE(s.total_realisasi_keuangan, 0::numeric)) OVER (ORDER BY m.bulan))::numeric as kumulatif_realisasi_keuangan
     FROM months m
     LEFT JOIN sp2d_bulanan s ON m.bulan = s.bulan
 )
 SELECT 
     m.bulan::int as bulan,
-    COALESCE(pt.total_pagu, 0)::float8 as total_pagu_paket,
-    COALESCE(tka.sum_target_keuangan, 0)::float8 as rencana_keuangan_persen,
-    COALESCE(sk.kumulatif_realisasi_keuangan, 0)::float8 as realisasi_keuangan_rp,
-    COALESCE(tfa.avg_target_fisik, 0)::float8 as rencana_fisik_persen,
-    COALESCE(rfa.avg_realisasi_fisik, 0)::float8 as realisasi_fisik_persen
+    COALESCE(pt.total_pagu, 0::numeric)::numeric as total_pagu_paket,
+    COALESCE(tka.sum_target_keuangan, 0::numeric) as rencana_keuangan_persen,
+    COALESCE(sk.kumulatif_realisasi_keuangan, 0::numeric)::numeric as realisasi_keuangan_rp,
+    COALESCE(tfa.avg_target_fisik, 0::numeric) as rencana_fisik_persen,
+    COALESCE(rfa.avg_realisasi_fisik, 0::numeric) as realisasi_fisik_persen
 FROM months m
 CROSS JOIN paket_totals pt
 LEFT JOIN target_keuangan_agg tka ON m.bulan = tka.bulan
@@ -93,12 +95,12 @@ ORDER BY m.bulan
 `
 
 type GetDashboardChartRow struct {
-	Bulan                 int32   `json:"bulan"`
-	TotalPaguPaket        float64 `json:"total_pagu_paket"`
-	RencanaKeuanganPersen float64 `json:"rencana_keuangan_persen"`
-	RealisasiKeuanganRp   float64 `json:"realisasi_keuangan_rp"`
-	RencanaFisikPersen    float64 `json:"rencana_fisik_persen"`
-	RealisasiFisikPersen  float64 `json:"realisasi_fisik_persen"`
+	Bulan                 int32          `json:"bulan"`
+	TotalPaguPaket        pgtype.Numeric `json:"total_pagu_paket"`
+	RencanaKeuanganPersen pgtype.Numeric `json:"rencana_keuangan_persen"`
+	RealisasiKeuanganRp   pgtype.Numeric `json:"realisasi_keuangan_rp"`
+	RencanaFisikPersen    pgtype.Numeric `json:"rencana_fisik_persen"`
+	RealisasiFisikPersen  pgtype.Numeric `json:"realisasi_fisik_persen"`
 }
 
 func (q *Queries) GetDashboardChart(ctx context.Context, tahunAnggaran int32) ([]GetDashboardChartRow, error) {
@@ -129,55 +131,73 @@ func (q *Queries) GetDashboardChart(ctx context.Context, tahunAnggaran int32) ([
 }
 
 const getDashboardDrillDown = `-- name: GetDashboardDrillDown :many
-WITH pkt_realisasi_rp AS (
-    SELECT
-        p.id as paket_id,
-        COALESCE(SUM(s.nilai_cair), 0) as realisasi_keuangan_rp
+WITH paket_filtered AS (
+    SELECT DISTINCT p.id, p.nama_paket, p.pagu_paket
     FROM paket_pekerjaan p
-    LEFT JOIN paket_akun_mapping pam ON p.id = pam.paket_id
-    LEFT JOIN realisasi_anggaran_sp2d s ON pam.akun_id = s.akun_id AND EXTRACT(MONTH FROM s.tanggal_sp2d) <= $1
-    GROUP BY p.id
+    JOIN paket_akun_mapping pam ON p.id = pam.paket_id
+    JOIN anggaran_akun aa ON pam.akun_id = aa.id
+    JOIN anggaran_sub_output aso ON aa.sub_output_id = aso.id
+    JOIN anggaran_output ao ON aso.output_id = ao.id
+    JOIN anggaran_kegiatan ak ON ao.kegiatan_id = ak.id
+    JOIN anggaran_program apr ON ak.program_id = apr.id
+    WHERE (apr.tahun_anggaran = $2 OR $2 = 0)
+),
+pkt_realisasi_rp AS (
+    SELECT
+        pf.id as paket_id,
+        COALESCE(SUM(s.nilai_cair), 0::numeric)::numeric as realisasi_keuangan_rp
+    FROM paket_filtered pf
+    LEFT JOIN paket_akun_mapping pam ON pf.id = pam.paket_id
+    LEFT JOIN realisasi_anggaran_sp2d s ON pam.akun_id = s.akun_id AND s.bulan <= $1
+    GROUP BY pf.id
 ),
 pkt_doc_agg AS (
     SELECT
-        paket_id,
+        d.paket_id,
         json_agg(
             json_build_object(
-                'id', id,
-                'kategori', kategori,
-                'jenis_dokumen', jenis_dokumen,
-                'original_name', original_name,
-                'file_size_bytes', file_size_bytes
+                'id', d.id,
+                'kategori', d.kategori,
+                'jenis_dokumen', d.jenis_dokumen,
+                'original_name', d.original_name,
+                'file_size_bytes', d.file_size_bytes
             )
-        ) FILTER (WHERE id IS NOT NULL) as dokumen_list
-    FROM dokumen_bukti
-    WHERE bulan = $1
-    GROUP BY paket_id
+        ) FILTER (WHERE d.id IS NOT NULL) as dokumen_list
+    FROM dokumen_bukti d
+    JOIN paket_filtered pf ON d.paket_id = pf.id
+    WHERE d.bulan = $1
+    GROUP BY d.paket_id
 )
 SELECT 
-    p.id as paket_id,
-    p.nama_paket,
-    p.pagu_paket,
-    COALESCE(pr.realisasi_keuangan_rp, 0) as realisasi_keuangan_rp,
-    COALESCE(rf.persen_aktual, 0) as realisasi_fisik_persen,
+    pf.id as paket_id,
+    pf.nama_paket,
+    pf.pagu_paket,
+    COALESCE(pr.realisasi_keuangan_rp, 0::numeric) as realisasi_keuangan_rp,
+    COALESCE(rf.persen_aktual, 0::numeric) as realisasi_fisik_persen,
     COALESCE(pd.dokumen_list, '[]'::json) as dokumen
-FROM paket_pekerjaan p
-LEFT JOIN pkt_realisasi_rp pr ON p.id = pr.paket_id
-LEFT JOIN paket_realisasi_fisik rf ON p.id = rf.paket_id AND rf.bulan = $1
-LEFT JOIN pkt_doc_agg pd ON p.id = pd.paket_id
+FROM paket_filtered pf
+LEFT JOIN pkt_realisasi_rp pr ON pf.id = pr.paket_id
+LEFT JOIN paket_realisasi_fisik rf ON pf.id = rf.paket_id AND rf.bulan = $1
+LEFT JOIN pkt_doc_agg pd ON pf.id = pd.paket_id
+ORDER BY pf.nama_paket
 `
+
+type GetDashboardDrillDownParams struct {
+	Bulan         int32 `json:"bulan"`
+	TahunAnggaran int32 `json:"tahun_anggaran"`
+}
 
 type GetDashboardDrillDownRow struct {
 	PaketID              pgtype.UUID    `json:"paket_id"`
 	NamaPaket            string         `json:"nama_paket"`
 	PaguPaket            pgtype.Numeric `json:"pagu_paket"`
-	RealisasiKeuanganRp  interface{}    `json:"realisasi_keuangan_rp"`
+	RealisasiKeuanganRp  pgtype.Numeric `json:"realisasi_keuangan_rp"`
 	RealisasiFisikPersen pgtype.Numeric `json:"realisasi_fisik_persen"`
 	Dokumen              []byte         `json:"dokumen"`
 }
 
-func (q *Queries) GetDashboardDrillDown(ctx context.Context, bulan int32) ([]GetDashboardDrillDownRow, error) {
-	rows, err := q.db.Query(ctx, getDashboardDrillDown, bulan)
+func (q *Queries) GetDashboardDrillDown(ctx context.Context, arg GetDashboardDrillDownParams) ([]GetDashboardDrillDownRow, error) {
+	rows, err := q.db.Query(ctx, getDashboardDrillDown, arg.Bulan, arg.TahunAnggaran)
 	if err != nil {
 		return nil, err
 	}

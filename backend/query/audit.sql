@@ -18,3 +18,7 @@ LIMIT $1 OFFSET $2;
 
 -- name: CountActivityLogs :one
 SELECT COUNT(*) FROM activity_logs;
+
+-- name: DeleteActivityLogsBefore :execrows
+DELETE FROM activity_logs
+WHERE created_at < $1;

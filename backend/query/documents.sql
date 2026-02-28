@@ -16,6 +16,13 @@ LEFT JOIN users u ON u.id = d.verified_by
 WHERE d.paket_id = $1
 ORDER BY d.bulan, d.kategori, d.created_at DESC;
 
+-- name: GetDocumentsByPaketIDs :many
+SELECT d.*, u.full_name as verified_by_full_name
+FROM dokumen_bukti d
+LEFT JOIN users u ON u.id = d.verified_by
+WHERE d.paket_id = ANY($1::uuid[])
+ORDER BY d.paket_id, d.bulan, d.kategori, d.created_at DESC;
+
 -- name: GetDocumentsByPaketAndBulan :many
 SELECT d.*, u.full_name as verified_by_full_name
 FROM dokumen_bukti d
