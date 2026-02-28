@@ -102,4 +102,97 @@ describe('buildTree', () => {
         expect(akun.pagu).toBe(300)
         expect(akun.realisasi).toBe(150)
     })
+
+    it('handles incomplete hierarchy rows and akun-less rows safely', () => {
+        const rows = [
+            makeRow({ KegiatanID: '', pagu: undefined, Pagu: 10 }),
+            makeRow({ OutputID: '', Pagu: 20 }),
+            makeRow({ SubOutputID: '', Pagu: 30 }),
+            makeRow({ AkunID: '', Pagu: 40, Realisasi: 15, Sisa: 25 }),
+        ]
+
+        const tree = buildTree(rows)
+        expect(tree).toHaveLength(1)
+        expect(tree[0].children).toHaveLength(1)
+        expect(tree[0].pagu).toBe(40)
+
+        const subOutput = tree[0].children![0].children![0].children![0]
+        expect(subOutput.children).toEqual([])
+        expect(subOutput.pagu).toBe(40)
+    })
+
+    it('parses numeric string values and defaults missing akun text fields', () => {
+        const row = makeRow({
+            AkunKode: undefined,
+            akun_kode: undefined,
+            AkunUraian: undefined,
+            akun_uraian: undefined,
+            Pagu: undefined,
+            Realisasi: undefined,
+            Sisa: undefined,
+            pagu: '123.45' as unknown as number,
+            realisasi: 'invalid' as unknown as number,
+            sisa: '10' as unknown as number,
+        })
+
+        const tree = buildTree([row])
+        const akun = tree[0].children![0].children![0].children![0].children![0]
+
+        expect(akun.kode).toBe('')
+        expect(akun.uraian).toBe('')
+        expect(akun.pagu).toBe(123.45)
+        expect(akun.realisasi).toBe(0)
+        expect(akun.sisa).toBe(10)
+    })
+
+    it('falls back to empty output text fields and handles numeric string zero values', () => {
+        const row = makeRow({
+            OutputUraian: undefined,
+            output_uraian: undefined,
+            SubOutputKode: undefined,
+            sub_output_kode: undefined,
+            SubOutputUraian: undefined,
+            sub_output_uraian: undefined,
+            Pagu: undefined,
+            Sisa: undefined,
+            pagu: '0' as unknown as number,
+            sisa: '0' as unknown as number,
+        })
+
+        const tree = buildTree([row])
+        const output = tree[0].children![0].children![0]
+        const subOutput = output.children![0]
+
+        expect(output.uraian).toBe('')
+        expect(subOutput.kode).toBe('')
+        expect(subOutput.uraian).toBe('')
+        expect(tree[0].pagu).toBe(0)
+        expect(tree[0].sisa).toBe(0)
+    })
+
+    it('falls back to empty program, kegiatan, and output kode/uraian text fields', () => {
+        const row = makeRow({
+            ProgramKode: undefined,
+            program_kode: undefined,
+            ProgramUraian: undefined,
+            program_uraian: undefined,
+            KegiatanKode: undefined,
+            kegiatan_kode: undefined,
+            KegiatanUraian: undefined,
+            kegiatan_uraian: undefined,
+            OutputKode: undefined,
+            output_kode: undefined,
+        })
+
+        const tree = buildTree([row])
+        const program = tree[0]
+        const kegiatan = program.children![0]
+        const output = kegiatan.children![0]
+
+        expect(program.kode).toBe('')
+        expect(program.uraian).toBe('')
+        expect(kegiatan.kode).toBe('')
+        expect(kegiatan.uraian).toBe('')
+        expect(output.kode).toBe('')
+    })
 })
