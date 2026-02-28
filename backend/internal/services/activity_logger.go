@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"time"
 
+	"github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/db"
+	"github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/util"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/vandal/keuangan-pusbangkom/internal/db"
 )
 
 type ActivityLogger struct {
@@ -19,6 +21,9 @@ func NewActivityLogger(queries *db.Queries) *ActivityLogger {
 }
 
 func (l *ActivityLogger) Log(ctx context.Context, userID uuid.UUID, action string, targetType string, targetID *uuid.UUID, details map[string]interface{}, ip string, ua string) {
+	logCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+	defer cancel()
+
 	var detailsJSON []byte
 	if details != nil {
 		var err error
@@ -30,12 +35,12 @@ func (l *ActivityLogger) Log(ctx context.Context, userID uuid.UUID, action strin
 
 	var tgID pgtype.UUID
 	if targetID != nil {
-		tgID = pgtype.UUID{Bytes: *targetID, Valid: true}
+		tgID = util.UUIDToPgUUID(*targetID)
 	}
 
-	_, err := l.queries.CreateActivityLog(ctx, db.CreateActivityLogParams{
-		ID:         pgtype.UUID{Bytes: uuid.New(), Valid: true},
-		UserID:     pgtype.UUID{Bytes: userID, Valid: true},
+	_, err := l.queries.CreateActivityLog(logCtx, db.CreateActivityLogParams{
+		ID:         util.NewPgUUID(),
+		UserID:     util.UUIDToPgUUID(userID),
 		Action:     action,
 		TargetType: pgtype.Text{String: targetType, Valid: targetType != ""},
 		TargetID:   tgID,
