@@ -6,10 +6,14 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/db"
 	"github.com/labstack/echo/v4"
 	"github.com/xuri/excelize/v2"
 )
+
+var closeExcelFile = func(f *excelize.File) error {
+	return f.Close()
+}
 
 func (h *Handler) GetDashboardChart(ctx echo.Context, params GetDashboardChartParams) error {
 	tahun := int32(0)
@@ -26,10 +30,10 @@ func (h *Handler) GetDashboardChart(ctx echo.Context, params GetDashboardChartPa
 	result := make([]DashboardChartItem, 0, len(rows))
 	for _, row := range rows {
 		bulan := int(row.Bulan)
-		renKes := float32(row.RencanaKeuanganPersen)
-		realKes := float32(row.RealisasiKeuanganRp)
-		renFis := float32(row.RencanaFisikPersen)
-		realFis := float32(row.RealisasiFisikPersen)
+		renKes := float32(numericToFloat64(row.RencanaKeuanganPersen))
+		realKes := numericToDecimalString(row.RealisasiKeuanganRp)
+		renFis := float32(numericToFloat64(row.RencanaFisikPersen))
+		realFis := float32(numericToFloat64(row.RealisasiFisikPersen))
 
 		result = append(result, DashboardChartItem{
 			Bulan:             &bulan,
@@ -44,7 +48,15 @@ func (h *Handler) GetDashboardChart(ctx echo.Context, params GetDashboardChartPa
 
 func (h *Handler) GetDashboardDrilldown(ctx echo.Context, params GetDashboardDrilldownParams) error {
 	bulan := int32(params.Bulan)
-	rows, err := h.queries.GetDashboardDrillDown(ctx.Request().Context(), bulan)
+	tahun := int32(0)
+	if params.Tahun != nil {
+		tahun = int32(*params.Tahun)
+	}
+
+	rows, err := h.queries.GetDashboardDrillDown(ctx.Request().Context(), db.GetDashboardDrillDownParams{
+		Bulan:         bulan,
+		TahunAnggaran: tahun,
+	})
 	if err != nil {
 		slog.Error("GetDashboardDrilldown failed", "error", err)
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to retrieve drilldown data"})
@@ -52,14 +64,8 @@ func (h *Handler) GetDashboardDrilldown(ctx echo.Context, params GetDashboardDri
 
 	result := make([]DashboardDrilldownItem, 0, len(rows))
 	for _, row := range rows {
-		pagu := float32(numericToFloat64(row.PaguPaket))
-
-		var realKes float32
-		if num, ok := row.RealisasiKeuanganRp.(pgtype.Numeric); ok {
-			realKes = float32(numericToFloat64(num))
-		} else {
-			realKes = 0
-		}
+		pagu := numericToDecimalString(row.PaguPaket)
+		realKes := numericToDecimalString(row.RealisasiKeuanganRp)
 
 		realFis := float32(numericToFloat64(row.RealisasiFisikPersen))
 		namaPak := row.NamaPaket
@@ -184,63 +190,79 @@ func (h *Handler) ExportPaketExcel(ctx echo.Context, params ExportPaketExcelPara
 		tahun = int32(*params.Tahun)
 	}
 
-	rows, err := h.queries.GetComplianceMatrix(ctx.Request().Context(), tahun)
-	if err != nil {
-		slog.Error("ExportPaketExcel failed to fetch data", "error", err)
-		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to retrieve data for export"})
-	}
-
 	f := excelize.NewFile()
 	defer func() {
-		if err := f.Close(); err != nil {
+		if err := closeExcelFile(f); err != nil {
 			fmt.Println(err)
 		}
 	}()
 
 	sheet := "Rekap Kepatuhan"
 	f.SetSheetName("Sheet1", sheet)
-
-	headers := []string{"Nama Paket", "Pagu Paket", "Realisasi Keuangan (Rp)", "Keuangan (%)", "Fisik (%)", "Deviasi (%)", "Status EWS", "Alasan/Keterangan"}
-	for i, hdr := range headers {
-		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
-		f.SetCellValue(sheet, cell, hdr)
+	headers := []interface{}{"Nama Paket", "Pagu Paket", "Realisasi Keuangan (Rp)", "Keuangan (%)", "Fisik (%)", "Deviasi (%)", "Status EWS", "Alasan/Keterangan"}
+	for idx, header := range headers {
+		cell, _ := excelize.CoordinatesToCellName(idx+1, 1)
+		f.SetCellValue(sheet, cell, header)
 	}
 
-	headerStyle, _ := f.NewStyle(&excelize.Style{
-		Font: &excelize.Font{Bold: true},
-		Fill: excelize.Fill{Type: "pattern", Color: []string{"#E0E0E0"}, Pattern: 1},
-	})
-	f.SetRowStyle(sheet, 1, 1, headerStyle)
-
-	for i, row := range rows {
-		rowIdx := i + 2
-		paguAnggaran := numericToFloat64(row.PaguAnggaran)
-		realKeu := numericToFloat64(row.RealisasiAnggaran)
-		realFis := numericToFloat64(row.RealisasiFisik)
-
-		pctKeu := float64(0)
-		if paguAnggaran > 0 {
-			pctKeu = (realKeu / paguAnggaran) * 100
+	rowIdx := 2
+	limit := int32(1000)
+	offset := int32(0)
+	for {
+		rows, err := h.queries.GetComplianceMatrixPaged(ctx.Request().Context(), db.GetComplianceMatrixPagedParams{
+			TahunAnggaran: tahun,
+			Limit:         limit,
+			Offset:        offset,
+		})
+		if err != nil {
+			slog.Error("ExportPaketExcel failed to fetch data", "error", err)
+			return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to retrieve data for export"})
+		}
+		if len(rows) == 0 {
+			break
 		}
 
-		status := "LENGKAP"
-		alasan := "Progres sesuai"
-		if pctKeu > 0 && realFis == 0 {
-			status = "TIDAK LENGKAP (KRITIS)"
-			alasan = "Dana cair, fisik 0%"
-		} else if realFis < pctKeu*0.9 {
-			status = "PERINGATAN"
-			alasan = "Deviasi negatif"
+		for _, row := range rows {
+			paguAnggaran := numericToFloat64(row.PaguAnggaran)
+			realKeu := numericToFloat64(row.RealisasiAnggaran)
+			realFis := numericToFloat64(row.RealisasiFisik)
+
+			pctKeu := float64(0)
+			if paguAnggaran > 0 {
+				pctKeu = (realKeu / paguAnggaran) * 100
+			}
+
+			status := "LENGKAP"
+			alasan := "Progres sesuai"
+			if pctKeu > 0 && realFis == 0 {
+				status = "TIDAK LENGKAP (KRITIS)"
+				alasan = "Dana cair, fisik 0%"
+			} else if realFis < pctKeu*0.9 {
+				status = "PERINGATAN"
+				alasan = "Deviasi negatif"
+			}
+
+			data := []interface{}{
+				row.NamaPaket,
+				paguAnggaran,
+				realKeu,
+				fmt.Sprintf("%.2f%%", pctKeu),
+				fmt.Sprintf("%.2f%%", realFis),
+				fmt.Sprintf("%.2f%%", realFis-pctKeu),
+				status,
+				alasan,
+			}
+			for col, val := range data {
+				cell, _ := excelize.CoordinatesToCellName(col+1, rowIdx)
+				f.SetCellValue(sheet, cell, val)
+			}
+			rowIdx++
 		}
 
-		f.SetCellValue(sheet, fmt.Sprintf("A%d", rowIdx), row.NamaPaket)
-		f.SetCellValue(sheet, fmt.Sprintf("B%d", rowIdx), paguAnggaran)
-		f.SetCellValue(sheet, fmt.Sprintf("C%d", rowIdx), realKeu)
-		f.SetCellValue(sheet, fmt.Sprintf("D%d", rowIdx), fmt.Sprintf("%.2f%%", pctKeu))
-		f.SetCellValue(sheet, fmt.Sprintf("E%d", rowIdx), fmt.Sprintf("%.2f%%", realFis))
-		f.SetCellValue(sheet, fmt.Sprintf("F%d", rowIdx), fmt.Sprintf("%.2f%%", realFis-pctKeu))
-		f.SetCellValue(sheet, fmt.Sprintf("G%d", rowIdx), status)
-		f.SetCellValue(sheet, fmt.Sprintf("H%d", rowIdx), alasan)
+		offset += int32(len(rows))
+		if int32(len(rows)) < limit {
+			break
+		}
 	}
 
 	f.SetColWidth(sheet, "A", "A", 40)
