@@ -1,4 +1,4 @@
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
@@ -14,7 +14,7 @@ COPY . .
 
 # Install tools required for code generation (sqlc, oapi-codegen)
 RUN go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.26.0 && \
-    go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
+    go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.5.1
 
 # Generate DB models and API stubs
 RUN if [ -f sqlc.yaml ]; then sqlc generate; fi
