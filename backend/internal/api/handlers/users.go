@@ -5,19 +5,14 @@ import (
 	"net/http"
 	"time"
 
+	authmw "github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/api/middleware"
+	"github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/db"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	openapi_types "github.com/oapi-codegen/runtime/types"
-	authmw "github.com/vandal/keuangan-pusbangkom/internal/api/middleware"
-	"github.com/vandal/keuangan-pusbangkom/internal/db"
 )
 
 func (h *Handler) ListUsers(ctx echo.Context) error {
-	claims := authmw.GetClaims(ctx)
-	if claims == nil || claims.Role != "SUPER_ADMIN" {
-		return ctx.JSON(http.StatusForbidden, map[string]string{"message": "forbidden: super admin only"})
-	}
-
 	users, err := h.queries.ListUsers(ctx.Request().Context())
 	if err != nil {
 		slog.Error("ListUsers failed", "error", err)
@@ -60,8 +55,8 @@ func (h *Handler) ListUsers(ctx echo.Context) error {
 
 func (h *Handler) CreateUser(ctx echo.Context) error {
 	claims := authmw.GetClaims(ctx)
-	if claims == nil || claims.Role != "SUPER_ADMIN" {
-		return ctx.JSON(http.StatusForbidden, map[string]string{"message": "forbidden: super admin only"})
+	if claims == nil {
+		return ctx.JSON(http.StatusUnauthorized, map[string]string{"message": "unauthorized"})
 	}
 
 	var body CreateUserRequest
@@ -89,13 +84,24 @@ func (h *Handler) CreateUser(ctx echo.Context) error {
 	adminID, _ := uuid.Parse(claims.UserID)
 	h.activity.Log(ctx.Request().Context(), adminID, "CREATE_USER", "user", ptr(uuid.UUID(user.ID.Bytes)), map[string]interface{}{"username": body.Username}, ctx.RealIP(), ctx.Request().UserAgent())
 
-	return ctx.JSON(http.StatusCreated, user)
+	createdAt := ""
+	if user.CreatedAt.Valid {
+		createdAt = user.CreatedAt.Time.Format(time.RFC3339)
+	}
+
+	return ctx.JSON(http.StatusCreated, map[string]interface{}{
+		"ID":        pgUUIDToString(user.ID),
+		"Username":  user.Username,
+		"FullName":  user.FullName,
+		"Role":      user.Role,
+		"CreatedAt": createdAt,
+	})
 }
 
 func (h *Handler) UpdateUser(ctx echo.Context, id openapi_types.UUID) error {
 	claims := authmw.GetClaims(ctx)
-	if claims == nil || claims.Role != "SUPER_ADMIN" {
-		return ctx.JSON(http.StatusForbidden, map[string]string{"message": "forbidden: super admin only"})
+	if claims == nil {
+		return ctx.JSON(http.StatusUnauthorized, map[string]string{"message": "unauthorized"})
 	}
 
 	var body UpdateUserRequest
@@ -141,13 +147,24 @@ func (h *Handler) UpdateUser(ctx echo.Context, id openapi_types.UUID) error {
 	adminID, _ := uuid.Parse(claims.UserID)
 	h.activity.Log(ctx.Request().Context(), adminID, "UPDATE_USER", "user", ptr(uuid.UUID(id)), map[string]interface{}{"username": currentUser.Username}, ctx.RealIP(), ctx.Request().UserAgent())
 
-	return ctx.JSON(http.StatusOK, user)
+	createdAt := ""
+	if user.CreatedAt.Valid {
+		createdAt = user.CreatedAt.Time.Format(time.RFC3339)
+	}
+
+	return ctx.JSON(http.StatusOK, map[string]interface{}{
+		"ID":        pgUUIDToString(user.ID),
+		"Username":  user.Username,
+		"FullName":  user.FullName,
+		"Role":      user.Role,
+		"CreatedAt": createdAt,
+	})
 }
 
 func (h *Handler) DeleteUser(ctx echo.Context, id openapi_types.UUID) error {
 	claims := authmw.GetClaims(ctx)
-	if claims == nil || claims.Role != "SUPER_ADMIN" {
-		return ctx.JSON(http.StatusForbidden, map[string]string{"message": "forbidden: super admin only"})
+	if claims == nil {
+		return ctx.JSON(http.StatusUnauthorized, map[string]string{"message": "unauthorized"})
 	}
 
 	err := h.queries.DeleteUser(ctx.Request().Context(), uuidToPgUUID(uuid.UUID(id)))

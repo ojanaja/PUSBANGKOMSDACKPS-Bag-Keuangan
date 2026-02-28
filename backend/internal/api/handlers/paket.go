@@ -1,15 +1,17 @@
 package handlers
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 
+	authmw "github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/api/middleware"
+	"github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/db"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/labstack/echo/v4"
 	openapi_types "github.com/oapi-codegen/runtime/types"
-	authmw "github.com/vandal/keuangan-pusbangkom/internal/api/middleware"
-	"github.com/vandal/keuangan-pusbangkom/internal/db"
 )
 
 func (h *Handler) ListPaket(ctx echo.Context, params ListPaketParams) error {
@@ -18,18 +20,44 @@ func (h *Handler) ListPaket(ctx echo.Context, params ListPaketParams) error {
 		tahun = int32(*params.Tahun)
 	}
 
-	pakets, err := h.queries.GetComplianceMatrix(ctx.Request().Context(), tahun)
+	limit := int32(50)
+	offset := int32(0)
+	if v := ctx.QueryParam("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			limit = int32(n)
+		}
+	}
+	if v := ctx.QueryParam("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			offset = int32(n)
+		}
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	pakets, err := h.queries.GetComplianceMatrixPaged(ctx.Request().Context(), db.GetComplianceMatrixPagedParams{
+		TahunAnggaran: tahun,
+		Limit:         limit,
+		Offset:        offset,
+	})
 	if err != nil {
-		slog.Error("GetComplianceMatrix failed", "error", err, "tahun", tahun)
+		slog.Error("GetComplianceMatrixPaged failed", "error", err, "tahun", tahun, "limit", limit, "offset", offset)
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to list paket compliance"})
 	}
 
 	type ComplianceResponse struct {
 		ID                string  `json:"ID"`
 		NamaPaket         string  `json:"NamaPaket"`
-		PaguPaket         float64 `json:"PaguPaket"`
-		PaguAnggaran      float64 `json:"PaguAnggaran"`
-		RealisasiAnggaran float64 `json:"RealisasiAnggaran"`
+		PaguPaket         string  `json:"PaguPaket"`
+		PaguAnggaran      string  `json:"PaguAnggaran"`
+		RealisasiAnggaran string  `json:"RealisasiAnggaran"`
 		RealisasiFisik    float64 `json:"RealisasiFisik"`
 	}
 
@@ -44,9 +72,9 @@ func (h *Handler) ListPaket(ctx echo.Context, params ListPaketParams) error {
 		response[i] = ComplianceResponse{
 			ID:                idStr,
 			NamaPaket:         p.NamaPaket,
-			PaguPaket:         numericToFloat64(p.PaguPaket),
-			PaguAnggaran:      numericToFloat64(p.PaguAnggaran),
-			RealisasiAnggaran: numericToFloat64(p.RealisasiAnggaran),
+			PaguPaket:         numericToDecimalString(p.PaguPaket),
+			PaguAnggaran:      numericToDecimalString(p.PaguAnggaran),
+			RealisasiAnggaran: numericToDecimalString(p.RealisasiAnggaran),
 			RealisasiFisik:    numericToFloat64(p.RealisasiFisik),
 		}
 	}
@@ -70,12 +98,29 @@ func (h *Handler) CreatePaket(ctx echo.Context) error {
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "invalid user id in session"})
 	}
 
-	paket, err := h.queries.InsertPaketPekerjaan(ctx.Request().Context(), db.InsertPaketPekerjaanParams{
+	reqCtx := ctx.Request().Context()
+	tx, err := h.pool.Begin(reqCtx)
+	if err != nil {
+		slog.Error("Begin tx failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to create paket"})
+	}
+	defer func() {
+		_ = tx.Rollback(reqCtx)
+	}()
+
+	qtx := h.queries.WithTx(tx)
+
+	paguPaket, err := decimalStringToNumeric(body.PaguPaket)
+	if err != nil {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "invalid pagu_paket"})
+	}
+
+	paket, err := qtx.InsertPaketPekerjaan(reqCtx, db.InsertPaketPekerjaanParams{
 		ID:        newPgUUID(),
 		NamaPaket: body.NamaPaket,
 		Kasatker:  body.Kasatker,
 		Lokasi:    body.Lokasi,
-		PaguPaket: float64ToNumeric(float64(body.PaguPaket)),
+		PaguPaket: paguPaket,
 		Status:    "DRAFT",
 		PpkID:     uuidToPgUUID(ppkID),
 	})
@@ -86,10 +131,13 @@ func (h *Handler) CreatePaket(ctx echo.Context) error {
 
 	if body.AkunIds != nil {
 		for _, akunID := range *body.AkunIds {
-			h.queries.InsertPaketAkunMapping(ctx.Request().Context(), db.InsertPaketAkunMappingParams{
+			if err := qtx.InsertPaketAkunMapping(reqCtx, db.InsertPaketAkunMappingParams{
 				PaketID: paket.ID,
 				AkunID:  uuidToPgUUID(uuid.UUID(akunID)),
-			})
+			}); err != nil {
+				slog.Error("InsertPaketAkunMapping failed", "error", err)
+				return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to create paket mappings"})
+			}
 		}
 	}
 
@@ -105,18 +153,25 @@ func (h *Handler) CreatePaket(ctx echo.Context) error {
 					valFis = float64(*t.PersenFisik)
 				}
 
-				h.queries.InsertPaketTarget(ctx.Request().Context(), db.InsertPaketTargetParams{
+				if _, err := qtx.InsertPaketTarget(reqCtx, db.InsertPaketTargetParams{
 					ID:             newPgUUID(),
 					PaketID:        paket.ID,
 					Bulan:          int32(*t.Bulan),
 					PersenKeuangan: float64ToNumeric(valKeu),
 					PersenFisik:    float64ToNumeric(valFis),
-				})
+				}); err != nil {
+					slog.Error("InsertPaketTarget failed", "error", err)
+					return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to create paket targets"})
+				}
 			}
 		}
 	}
 
-	
+	if err := tx.Commit(reqCtx); err != nil {
+		slog.Error("Commit tx failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to create paket"})
+	}
+
 	h.activity.Log(ctx.Request().Context(), ppkID, "CREATE_PAKET", "paket", ptr(uuid.UUID(paket.ID.Bytes)), map[string]interface{}{"nama": body.NamaPaket}, ctx.RealIP(), ctx.Request().UserAgent())
 
 	return ctx.JSON(http.StatusCreated, paket)
@@ -149,7 +204,7 @@ func (h *Handler) GetPaket(ctx echo.Context, id openapi_types.UUID) error {
 		"NamaPaket": paket.NamaPaket,
 		"Kasatker":  paket.Kasatker,
 		"Lokasi":    paket.Lokasi,
-		"PaguPaket": numericToFloat64(paket.PaguPaket),
+		"PaguPaket": numericToDecimalString(paket.PaguPaket),
 		"Status":    paket.Status,
 	}
 
@@ -207,34 +262,30 @@ func (h *Handler) UpdatePaket(ctx echo.Context, id openapi_types.UUID) error {
 
 	pgID := uuidToPgUUID(uuid.UUID(id))
 
-	namaPaket, kasatker, lokasi := "", "", ""
-	var pagu float64
+	params := db.UpdatePaketPekerjaanParams{ID: pgID}
 	if body.NamaPaket != nil {
-		namaPaket = *body.NamaPaket
+		params.NamaPaket = pgtype.Text{String: *body.NamaPaket, Valid: true}
 	}
 	if body.Kasatker != nil {
-		kasatker = *body.Kasatker
+		params.Kasatker = pgtype.Text{String: *body.Kasatker, Valid: true}
 	}
 	if body.Lokasi != nil {
-		lokasi = *body.Lokasi
+		params.Lokasi = pgtype.Text{String: *body.Lokasi, Valid: true}
 	}
 	if body.PaguPaket != nil {
-		pagu = float64(*body.PaguPaket)
+		paguPaket, err := decimalStringToNumeric(*body.PaguPaket)
+		if err != nil {
+			return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "invalid pagu_paket"})
+		}
+		params.PaguPaket = paguPaket
 	}
 
-	err := h.queries.UpdatePaketPekerjaan(ctx.Request().Context(), db.UpdatePaketPekerjaanParams{
-		NamaPaket: namaPaket,
-		Kasatker:  kasatker,
-		Lokasi:    lokasi,
-		PaguPaket: float64ToNumeric(pagu),
-		ID:        pgID,
-	})
+	err := h.queries.UpdatePaketPekerjaan(ctx.Request().Context(), params)
 	if err != nil {
 		slog.Error("UpdatePaketPekerjaan failed", "error", err)
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to update paket"})
 	}
 
-	
 	claims := authmw.GetClaims(ctx)
 	if claims != nil {
 		userID, _ := uuid.Parse(claims.UserID)
@@ -259,7 +310,6 @@ func (h *Handler) DeletePaket(ctx echo.Context, id openapi_types.UUID) error {
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to delete paket"})
 	}
 
-	
 	claims := authmw.GetClaims(ctx)
 	if claims != nil {
 		userID, _ := uuid.Parse(claims.UserID)
@@ -331,8 +381,8 @@ func (h *Handler) UpdateRealisasiFisik(ctx echo.Context, id openapi_types.UUID) 
 
 func (h *Handler) VerifyRealisasiFisik(ctx echo.Context, id openapi_types.UUID) error {
 	claims := authmw.GetClaims(ctx)
-	if claims == nil || (claims.Role != "SUPER_ADMIN" && claims.Role != "ADMIN_KEUANGAN") {
-		return ctx.JSON(http.StatusForbidden, map[string]string{"message": "forbidden: verifier role required"})
+	if claims == nil {
+		return ctx.JSON(http.StatusUnauthorized, map[string]string{"message": "unauthorized"})
 	}
 
 	var body VerificationRequest
@@ -355,11 +405,10 @@ func (h *Handler) VerifyRealisasiFisik(ctx echo.Context, id openapi_types.UUID) 
 	})
 
 	if err != nil {
-		slog.Error("VerifyRealisasiFisik failed", "error", err)
+		slog.Error("VerifyRealisasiFisik failed", "error", fmt.Errorf("verify realisasi: %w", err))
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to record verification"})
 	}
 
-	
 	h.activity.Log(ctx.Request().Context(), userID, "VERIFY_REALISASI", "realisasi", ptr(uuid.UUID(id)), map[string]interface{}{"status": body.Status}, ctx.RealIP(), ctx.Request().UserAgent())
 
 	return ctx.NoContent(http.StatusOK)

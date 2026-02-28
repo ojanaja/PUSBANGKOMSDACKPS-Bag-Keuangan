@@ -5,17 +5,11 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/db"
 	"github.com/labstack/echo/v4"
-	authmw "github.com/vandal/keuangan-pusbangkom/internal/api/middleware"
-	"github.com/vandal/keuangan-pusbangkom/internal/db"
 )
 
 func (h *Handler) ListAuditLogs(ctx echo.Context, params ListAuditLogsParams) error {
-	claims := authmw.GetClaims(ctx)
-	if claims == nil || claims.Role != "SUPER_ADMIN" {
-		return ctx.JSON(http.StatusForbidden, map[string]string{"message": "forbidden: super admin only"})
-	}
-
 	limit := int32(50)
 	if params.Limit != nil {
 		limit = int32(*params.Limit)
@@ -39,9 +33,7 @@ func (h *Handler) ListAuditLogs(ctx echo.Context, params ListAuditLogsParams) er
 	logs := make([]ActivityLog, 0, len(rows))
 	for _, row := range rows {
 		var details map[string]interface{}
-		if row.Details != nil {
-			json.Unmarshal(row.Details, &details)
-		}
+		_ = json.Unmarshal(row.Details, &details)
 
 		logs = append(logs, ActivityLog{
 			Id:           pgUUIDToOpenAPI(row.ID),

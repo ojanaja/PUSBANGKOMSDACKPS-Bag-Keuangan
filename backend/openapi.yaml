@@ -58,11 +58,11 @@ components:
         akun_uraian:
           type: string
         pagu:
-          type: number
+          type: string
         realisasi:
-          type: number
+          type: string
         sisa:
-          type: number
+          type: string
       required:
         - tahun_anggaran
         - program_kode
@@ -114,7 +114,7 @@ components:
         rencana_keuangan:
           type: number
         realisasi_keuangan:
-          type: number
+          type: string
         rencana_fisik:
           type: number
         realisasi_fisik:
@@ -129,9 +129,9 @@ components:
         nama_paket:
           type: string
         pagu_paket:
-          type: number
+          type: string
         realisasi_keuangan:
-          type: number
+          type: string
         realisasi_fisik:
           type: number
         dokumen:
@@ -232,7 +232,7 @@ components:
         lokasi:
           type: string
         pagu_paket:
-          type: number
+          type: string
       required: [nama_paket, kasatker, lokasi, pagu_paket]
 
     ActivityLog:
@@ -440,6 +440,21 @@ paths:
           required: false
           schema:
             type: integer
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
       responses:
         '200':
           description: List of paket
@@ -461,7 +476,7 @@ paths:
                 lokasi:
                   type: string
                 pagu_paket:
-                  type: number
+                  type: string
                 akun_ids:
                   type: array
                   items:
@@ -528,7 +543,7 @@ paths:
                 lokasi:
                   type: string
                 pagu_paket:
-                  type: number
+                  type: string
       responses:
         '200':
           description: Paket updated successfully
@@ -643,6 +658,11 @@ paths:
         - name: bulan
           in: query
           required: true
+          schema:
+            type: integer
+        - name: tahun
+          in: query
+          required: false
           schema:
             type: integer
       responses:

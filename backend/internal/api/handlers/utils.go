@@ -1,40 +1,44 @@
 package handlers
 
 import (
-	"fmt"
+	"strings"
 
+	"github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/util"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 func newPgUUID() pgtype.UUID {
-	id := uuid.New()
-	return pgtype.UUID{Bytes: id, Valid: true}
+	return util.NewPgUUID()
 }
 
 func uuidToPgUUID(id uuid.UUID) pgtype.UUID {
-	return pgtype.UUID{Bytes: id, Valid: true}
+	return util.UUIDToPgUUID(id)
 }
 
 func float64ToNumeric(f float64) pgtype.Numeric {
-	var n pgtype.Numeric
-	n.Scan(fmt.Sprintf("%f", f))
-	return n
+	return util.Float64ToNumeric(f)
 }
 
 func numericToFloat64(n pgtype.Numeric) float64 {
-	f, _ := n.Float64Value()
-	return f.Float64
+	return util.NumericToFloat64(n)
 }
 
 func numericToFloat32Ptr(n pgtype.Numeric) *float32 {
-	if !n.Valid {
-		return nil
+	return util.NumericToFloat32Ptr(n)
+}
+
+func numericToDecimalString(n pgtype.Numeric) string {
+	return util.NumericToDecimalString(n)
+}
+
+func decimalStringToNumeric(s string) (pgtype.Numeric, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		s = "0"
 	}
-	f, _ := n.Float64Value()
-	v := float32(f.Float64)
-	return &v
+	return util.DecimalStringToNumeric(s)
 }
 
 func textPtr(t pgtype.Text) *string {
