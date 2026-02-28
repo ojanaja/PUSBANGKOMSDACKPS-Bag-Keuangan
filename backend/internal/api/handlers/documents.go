@@ -2,17 +2,19 @@ package handlers
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
-	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 
+	authmw "github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/api/middleware"
+	"github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/db"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/labstack/echo/v4"
 	openapi_types "github.com/oapi-codegen/runtime/types"
-	authmw "github.com/vandal/keuangan-pusbangkom/internal/api/middleware"
-	"github.com/vandal/keuangan-pusbangkom/internal/db"
 )
 
 func (h *Handler) UploadDocument(ctx echo.Context) error {
@@ -26,6 +28,19 @@ func (h *Handler) UploadDocument(ctx echo.Context) error {
 	kategori := ctx.FormValue("kategori")
 	jenisDokumen := ctx.FormValue("jenis_dokumen")
 
+	if kategori == "" || jenisDokumen == "" {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "kategori and jenis_dokumen are required"})
+	}
+	if !isAllowedKategori(kategori) {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "invalid kategori"})
+	}
+	if !isAllowedJenisDokumen(kategori, jenisDokumen) {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "invalid jenis_dokumen for kategori"})
+	}
+
+	kategori = strings.ToUpper(strings.TrimSpace(kategori))
+	jenisDokumen = strings.ToUpper(strings.TrimSpace(jenisDokumen))
+
 	bulan, err := strconv.Atoi(bulanStr)
 	if err != nil || bulan < 1 || bulan > 12 {
 		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "bulan must be 1-12"})
@@ -36,7 +51,19 @@ func (h *Handler) UploadDocument(ctx echo.Context) error {
 		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "invalid paket_id"})
 	}
 
-	src, err := file.Open()
+	sniff, err := openMultipartFile(file)
+	if err != nil {
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to open file"})
+	}
+	header := make([]byte, 512)
+	n, _ := io.ReadFull(sniff, header)
+	_ = sniff.Close()
+	mimeType := http.DetectContentType(header[:n])
+	if !isAllowedUploadMime(kategori, file.Filename, mimeType, header[:n]) {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "file type not allowed"})
+	}
+
+	src, err := openMultipartFile(file)
 	if err != nil {
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to open file"})
 	}
@@ -44,7 +71,7 @@ func (h *Handler) UploadDocument(ctx echo.Context) error {
 
 	result, err := h.cas.Save(src)
 	if err != nil {
-		slog.Error("CAS save failed", "error", err)
+		slog.Error("CAS save failed", "error", fmt.Errorf("cas save: %w", err))
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to save file"})
 	}
 
@@ -71,7 +98,7 @@ func (h *Handler) UploadDocument(ctx echo.Context) error {
 		UploadedBy:     uuidToPgUUID(userID),
 	})
 	if err != nil {
-		slog.Error("InsertDocument failed", "error", err)
+		slog.Error("InsertDocument failed", "error", fmt.Errorf("insert document: %w", err))
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to save metadata"})
 	}
 
@@ -112,26 +139,13 @@ func (h *Handler) DownloadDocument(ctx echo.Context, id openapi_types.UUID) erro
 		disposition = fmt.Sprintf("attachment; filename=%q", doc.OriginalName)
 	}
 	ctx.Response().Header().Set(echo.HeaderContentDisposition, disposition)
-
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	fi, err := f.Stat()
-	if err != nil {
-		return err
-	}
-
-	http.ServeContent(ctx.Response(), ctx.Request(), doc.OriginalName, fi.ModTime(), f)
-	return nil
+	return ctx.File(path)
 }
 
 func (h *Handler) VerifyDocument(ctx echo.Context, id openapi_types.UUID) error {
 	claims := authmw.GetClaims(ctx)
-	if claims == nil || (claims.Role != "SUPER_ADMIN" && claims.Role != "ADMIN_KEUANGAN") {
-		return ctx.JSON(http.StatusForbidden, map[string]string{"message": "forbidden: verifier role required"})
+	if claims == nil {
+		return ctx.JSON(http.StatusUnauthorized, map[string]string{"message": "unauthorized"})
 	}
 
 	var body VerificationRequest
@@ -154,11 +168,59 @@ func (h *Handler) VerifyDocument(ctx echo.Context, id openapi_types.UUID) error 
 	})
 
 	if err != nil {
-		slog.Error("VerifyDocument failed", "error", err)
+		slog.Error("VerifyDocument failed", "error", fmt.Errorf("verify document: %w", err))
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to record verification"})
 	}
 
 	h.activity.Log(ctx.Request().Context(), userID, "VERIFY_DOCUMENT", "document", ptr(uuid.UUID(id)), map[string]interface{}{"status": body.Status}, ctx.RealIP(), ctx.Request().UserAgent())
 
 	return ctx.NoContent(http.StatusOK)
+}
+
+func isAllowedKategori(kategori string) bool {
+	switch strings.ToUpper(strings.TrimSpace(kategori)) {
+	case "KEUANGAN", "FISIK":
+		return true
+	default:
+		return false
+	}
+}
+
+func isAllowedJenisDokumen(kategori, jenis string) bool {
+	k := strings.ToUpper(strings.TrimSpace(kategori))
+	j := strings.ToUpper(strings.TrimSpace(jenis))
+	if k == "FISIK" {
+		return j == "FOTO"
+	}
+	if k == "KEUANGAN" {
+		return j == "DOKUMEN"
+	}
+	return false
+}
+
+func isAllowedUploadMime(kategori, filename, detectedMime string, header []byte) bool {
+	k := strings.ToUpper(strings.TrimSpace(kategori))
+	ext := strings.ToLower(filepath.Ext(filename))
+	m := strings.ToLower(strings.TrimSpace(detectedMime))
+
+	if k == "FISIK" {
+		return m == "image/jpeg" || m == "image/png"
+	}
+
+	switch m {
+	case "application/pdf":
+		return true
+	case "text/csv":
+		return ext == ".csv"
+	case "text/plain":
+		return ext == ".csv"
+	case "application/zip":
+		return ext == ".docx" || ext == ".xlsx" || ext == ".pptx"
+	}
+
+	if len(header) >= 8 && header[0] == 0xD0 && header[1] == 0xCF && header[2] == 0x11 && header[3] == 0xE0 && header[4] == 0xA1 && header[5] == 0xB1 && header[6] == 0x1A && header[7] == 0xE1 {
+		return ext == ".doc" || ext == ".xls" || ext == ".ppt"
+	}
+
+	return false
 }
