@@ -1,7 +1,6 @@
 package services
 
 import (
-	"errors"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -61,10 +60,7 @@ func (s *AuthService) ValidateToken(tokenString string) (*Claims, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	if !token.Valid {
-		return nil, errors.New("invalid token")
-	}
+	_ = token
 
 	return claims, nil
 }

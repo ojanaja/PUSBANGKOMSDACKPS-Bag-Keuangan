@@ -1,30 +1,36 @@
 package handlers
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/api/middleware"
+	"github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/db"
+	"github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/services"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
-	"github.com/vandal/keuangan-pusbangkom/internal/api/middleware"
-	"github.com/vandal/keuangan-pusbangkom/internal/db"
-	"github.com/vandal/keuangan-pusbangkom/internal/services"
 )
 
 type AuthHandler struct {
 	authService *services.AuthService
 	queries     *db.Queries
 	activity    *services.ActivityLogger
+	pool        sqlExecutor
 }
 
-func NewAuthHandler(authService *services.AuthService, queries *db.Queries, activity *services.ActivityLogger) *AuthHandler {
+func NewAuthHandler(authService *services.AuthService, queries *db.Queries, pool *pgxpool.Pool, activity *services.ActivityLogger) *AuthHandler {
 	return &AuthHandler{
 		authService: authService,
 		queries:     queries,
+		pool:        pool,
 		activity:    activity,
 	}
 }
@@ -60,14 +66,11 @@ func (h *AuthHandler) Login(c echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"message": "Invalid username or password"})
 	}
 
-	token, err := h.authService.GenerateToken(
+	token, _ := h.authService.GenerateToken(
 		fmt.Sprintf("%x-%x-%x-%x-%x", user.ID.Bytes[0:4], user.ID.Bytes[4:6], user.ID.Bytes[6:8], user.ID.Bytes[8:10], user.ID.Bytes[10:16]),
 		user.Username,
 		user.Role,
 	)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Failed to generate token"})
-	}
 
 	c.SetCookie(&http.Cookie{
 		Name:     "session",
@@ -94,6 +97,27 @@ func (h *AuthHandler) Login(c echo.Context) error {
 }
 
 func (h *AuthHandler) Logout(c echo.Context) error {
+	if cookie, err := c.Cookie("session"); err == nil && cookie.Value != "" && h.pool != nil {
+		exp := time.Now().Add(24 * time.Hour)
+		if claims, err := h.authService.ValidateToken(cookie.Value); err == nil && claims.ExpiresAt != nil {
+			exp = claims.ExpiresAt.Time
+		}
+
+		hash := sha256.Sum256([]byte(cookie.Value))
+		tokenHashHex := hex.EncodeToString(hash[:])
+
+		if _, err := h.pool.Exec(
+			c.Request().Context(),
+			"INSERT INTO revoked_tokens (token_sha256, expires_at) VALUES ($1, $2) ON CONFLICT (token_sha256) DO UPDATE SET expires_at = EXCLUDED.expires_at",
+			tokenHashHex,
+			exp,
+		); err != nil {
+			slog.Error("failed to revoke token on logout", "error", err)
+			return c.JSON(http.StatusServiceUnavailable, map[string]string{"message": "failed to logout"})
+		}
+		_, _ = h.pool.Exec(c.Request().Context(), "DELETE FROM revoked_tokens WHERE expires_at < now()")
+	}
+
 	c.SetCookie(&http.Cookie{
 		Name:     "session",
 		Value:    "",
@@ -150,6 +174,12 @@ func pgUUIDToString(id pgtype.UUID) string {
 
 func cookieSecureEnabled() bool {
 	v := strings.TrimSpace(strings.ToLower(os.Getenv("COOKIE_SECURE")))
+	if v == "" {
+		return true
+	}
+	if v == "0" || v == "false" || v == "no" || v == "off" {
+		return false
+	}
 	return v == "1" || v == "true" || v == "yes" || v == "on"
 }
 
