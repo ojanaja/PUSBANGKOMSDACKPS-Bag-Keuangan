@@ -191,3 +191,21 @@ Pastikan environment variable di set dengan nilai production yang aman (terutama
 
 **Isu CORS:**
 - Jika frontend dan backend berjalan di port berbeda tanpa Nginx, pastikan konfigurasi CORS di backend mengizinkan origin frontend.
+
+---
+
+## 🛡 Security Best Practices
+
+### 1. Credentials
+- **JANGAN PERNAH** commit file `.env` ke repository.
+- File `.env.example` dan `.env.prod.example` boleh dikomit karena hanya berisi template tanpa nilai rahasia asli.
+
+### 2. Default Passwords
+- Migrasi database (`migrations/000002_seed_users.up.sql`) membuat user default (spu, admin, dll) dengan password bawaan `password123`.
+- **Wajib ganti password** akun-akun ini segera setelah deployment pertama kali ke production.
+
+### 3. Production Deployment
+- Gunakan `docker-compose.prod.yml`.
+- Pastikan variable `JWT_SECRET` di-set dengan string acak yang panjang dan rumit.
+- Pastikan `POSTGRES_PASSWORD` di production berbeda dengan password development.
+
