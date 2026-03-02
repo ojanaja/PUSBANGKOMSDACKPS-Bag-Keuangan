@@ -7,9 +7,9 @@ services:
     container_name: keuangan-db
     restart: always
     environment:
-      POSTGRES_USER: siap_admin
-      POSTGRES_PASSWORD: siap_password
-      POSTGRES_DB: siap_bpk
+      POSTGRES_USER: keuangan_admin
+      POSTGRES_PASSWORD: keuangan_password
+      POSTGRES_DB: keuangan_pusbangkom
     ports:
       - "5432:5432"
     volumes:
@@ -39,7 +39,7 @@ services:
       dockerfile: Dockerfile
     container_name: keuangan-backend
     environment:
-      - DB_URL=postgres://siap_admin:siap_password@db:5432/siap_bpk?sslmode=disable
+      - DB_URL=postgres://keuangan_admin:keuangan_password@db:5432/keuangan_pusbangkom?sslmode=disable
       - JWT_SECRET=keuangan-pusbangkom-jwt-secret-2026
       - CAS_PATH=/app/storage/cas
     ports:

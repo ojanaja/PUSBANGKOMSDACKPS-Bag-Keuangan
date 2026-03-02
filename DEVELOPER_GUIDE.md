@@ -50,7 +50,7 @@ cd keuangan-pusbangkom
 Buat file `.env` di folder `backend/` (atau set environment variable secara manual).
 Contoh konfigurasi minimal:
 ```ini
-DB_URL=postgres://siap_admin:siap_password@localhost:5432/siap_bpk?sslmode=disable
+DB_URL=postgres://keuangan_admin:keuangan_password@localhost:5432/keuangan_pusbangkom?sslmode=disable
 JWT_SECRET=rahasia_super_aman_ganti_ini_di_prod
 CAS_PATH=./storage/cas
 BODY_LIMIT=50M
