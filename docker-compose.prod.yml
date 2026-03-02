@@ -31,7 +31,7 @@ services:
     cpus: 0.70
 
   backend:
-    image: ghcr.io/ojanaja/siap-bpk-backend:latest
+    image: ghcr.io/ojanaja/keuangan-pusbangkom-backend:latest
     container_name: keuangan-backend
     restart: always
     environment:
@@ -54,7 +54,7 @@ services:
     cpus: 0.60
 
   nginx:
-    image: ghcr.io/ojanaja/siap-bpk-nginx:latest
+    image: ghcr.io/ojanaja/keuangan-pusbangkom-nginx:latest
     container_name: keuangan-nginx
     restart: always
     depends_on:

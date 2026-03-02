@@ -110,7 +110,7 @@ jobs:
         id: meta-backend
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/siap-bpk-backend
+          images: ghcr.io/${{ github.repository_owner }}/keuangan-pusbangkom-backend
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=sha-,format=short
@@ -131,7 +131,7 @@ jobs:
         id: meta-nginx
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/siap-bpk-nginx
+          images: ghcr.io/${{ github.repository_owner }}/keuangan-pusbangkom-nginx
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=sha-,format=short
