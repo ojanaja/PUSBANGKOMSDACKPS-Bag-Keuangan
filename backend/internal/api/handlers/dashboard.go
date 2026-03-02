@@ -113,7 +113,7 @@ func (h *Handler) GetDashboardNotifications(ctx echo.Context) error {
 		if pctKeu > 0 && realFis == 0 {
 			results = append(results, NotificationItem{
 				Id:      ptr(fmt.Sprintf("crit-%s", *idStr)),
-				Title:   ptr("🔴 Kritis: Realisasi Kosong"),
+				Title:   ptr("Kritis: Realisasi Kosong"),
 				Detail:  ptr(fmt.Sprintf("Pencairan dana sudah ada pada paket '%s', namun laporan fisik/dokumentasi masih kosong.", nama)),
 				Type:    ptr(NotificationItemType("critical")),
 				Time:    ptr("Baru saja"),
@@ -124,7 +124,7 @@ func (h *Handler) GetDashboardNotifications(ctx echo.Context) error {
 		if realFis < pctKeu*0.9 && realFis > 0 {
 			results = append(results, NotificationItem{
 				Id:      ptr(fmt.Sprintf("warn-%s", *idStr)),
-				Title:   ptr("🟡 Peringatan: Deviasi Tinggi"),
+				Title:   ptr("Peringatan: Deviasi Tinggi"),
 				Detail:  ptr(fmt.Sprintf("Paket '%s' mengalami deviasi fisik negatif. Progres lapangan tertinggal dari pencairan dana.", nama)),
 				Type:    ptr(NotificationItemType("warning")),
 				Time:    ptr("Baru saja"),
