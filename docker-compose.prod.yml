@@ -31,9 +31,7 @@ services:
     cpus: 0.70
 
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: ghcr.io/ojanaja/siap-bpk-backend:latest
     container_name: keuangan-backend
     restart: always
     environment:
@@ -56,16 +54,14 @@ services:
     cpus: 0.60
 
   nginx:
-    build:
-      context: .
-      dockerfile: nginx/Dockerfile
+    image: ghcr.io/ojanaja/siap-bpk-nginx:latest
     container_name: keuangan-nginx
     restart: always
     depends_on:
       - backend
     ports:
-      - "80:80"
-      - "443:443"
+      - "8000:80"
+      - "8443:443"
     volumes:
       - ./nginx/certs:/etc/nginx/certs:ro
     networks:
@@ -73,6 +69,25 @@ services:
       - public
     mem_limit: 80m
     cpus: 0.30
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: keuangan-watchtower
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /root/.docker/config.json:/config.json
+    command: --interval 300 --cleanup --include-restarting
+    mem_limit: 64m
+    cpus: 0.10
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: keuangan-tunnel
+    restart: always
+    network_mode: host
+    command: tunnel --url https://localhost:8443 --no-tls-verify
+    mem_limit: 128m
 
 volumes:
   db_data:
