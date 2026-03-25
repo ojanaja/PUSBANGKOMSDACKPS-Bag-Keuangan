@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost } from '@/shared/api/httpClient'
-import type { AnggaranTreeRow } from '@/features/anggaran/application/useAnggaran'
+import type { APIAnggaranNode } from '@/features/anggaran/application/useAnggaran'
 
 export interface AnggaranAkun {
     AkunID: string
@@ -25,16 +25,16 @@ export function usePaketWizard(tahun: number) {
     const akunQuery = useQuery({
         queryKey: ['anggaran-tree', tahun],
         queryFn: async () => {
-            const data = await apiGet<AnggaranTreeRow[]>(`/anggaran/tree?tahun=${tahun}`)
+            const data = await apiGet<APIAnggaranNode[]>(`/anggaran/tree?tahun=${tahun}`)
             const uniqueAkun = new Map<string, AnggaranAkun>()
             if (Array.isArray(data)) {
                 data.forEach((row) => {
-                    if (row.AkunID && row.AkunKode && row.AkunUraian) {
-                        uniqueAkun.set(row.AkunID, {
-                            AkunID: row.AkunID,
-                            AkunKode: row.AkunKode,
-                            AkunUraian: row.AkunUraian,
-                            Pagu: row.Pagu
+                    if (row.jenis === 'AKUN' && row.id) {
+                        uniqueAkun.set(row.id, {
+                            AkunID: row.id,
+                            AkunKode: row.kode,
+                            AkunUraian: row.uraian,
+                            Pagu: parseFloat(row.pagu_revisi) || 0
                         })
                     }
                 })

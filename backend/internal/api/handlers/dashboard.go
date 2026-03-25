@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/db"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/labstack/echo/v4"
 	"github.com/xuri/excelize/v2"
 )
@@ -16,14 +17,18 @@ var closeExcelFile = func(f *excelize.File) error {
 }
 
 func (h *Handler) GetDashboardChart(ctx echo.Context, params GetDashboardChartParams) error {
-	tahun := int32(0)
+	reqCtx := ctx.Request().Context()
+	var rows []db.GetDashboardChartRow
+	var err error
+
 	if params.Tahun != nil {
-		tahun = int32(*params.Tahun)
+		rows, err = h.queries.GetDashboardChart(reqCtx, pgtype.Int4{Int32: int32(*params.Tahun), Valid: true})
+	} else {
+		rows, err = h.queries.GetDashboardChart(reqCtx, pgtype.Int4{Int32: 0, Valid: false})
 	}
 
-	rows, err := h.queries.GetDashboardChart(ctx.Request().Context(), tahun)
 	if err != nil {
-		slog.Error("GetDashboardChart failed", "error", err, "tahun", tahun)
+		slog.Error("GetDashboardChart failed", "error", err, "tahun", params.Tahun)
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to retrieve chart data"})
 	}
 
@@ -47,16 +52,21 @@ func (h *Handler) GetDashboardChart(ctx echo.Context, params GetDashboardChartPa
 }
 
 func (h *Handler) GetDashboardDrilldown(ctx echo.Context, params GetDashboardDrilldownParams) error {
-	bulan := int32(params.Bulan)
-	tahun := int32(0)
-	if params.Tahun != nil {
-		tahun = int32(*params.Tahun)
-	}
+	reqCtx := ctx.Request().Context()
+	var rows []db.GetDashboardDrillDownRow
+	var err error
 
-	rows, err := h.queries.GetDashboardDrillDown(ctx.Request().Context(), db.GetDashboardDrillDownParams{
-		Bulan:         bulan,
-		TahunAnggaran: tahun,
-	})
+	if params.Tahun != nil {
+		rows, err = h.queries.GetDashboardDrillDown(reqCtx, db.GetDashboardDrillDownParams{
+			Bulan:         int32(params.Bulan),
+			TahunAnggaran: pgtype.Int4{Int32: int32(*params.Tahun), Valid: true},
+		})
+	} else {
+		rows, err = h.queries.GetDashboardDrillDown(reqCtx, db.GetDashboardDrillDownParams{
+			Bulan:         int32(params.Bulan),
+			TahunAnggaran: pgtype.Int4{Int32: 0, Valid: false},
+		})
+	}
 	if err != nil {
 		slog.Error("GetDashboardDrilldown failed", "error", err)
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to retrieve drilldown data"})
@@ -91,7 +101,7 @@ func (h *Handler) GetDashboardDrilldown(ctx echo.Context, params GetDashboardDri
 }
 
 func (h *Handler) GetDashboardNotifications(ctx echo.Context) error {
-	rows, err := h.queries.GetComplianceMatrix(ctx.Request().Context(), 0)
+	rows, err := h.queries.GetComplianceMatrix(ctx.Request().Context(), pgtype.Int4{Int32: 0, Valid: false})
 	if err != nil {
 		slog.Error("GetDashboardNotifications logic failed", "error", err)
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to calculate notifications"})
@@ -137,12 +147,16 @@ func (h *Handler) GetDashboardNotifications(ctx echo.Context) error {
 }
 
 func (h *Handler) GetDashboardEWS(ctx echo.Context, params GetDashboardEWSParams) error {
-	tahun := int32(0)
+	reqCtx := ctx.Request().Context()
+	var rows []db.GetComplianceMatrixRow
+	var err error
+
 	if params.Tahun != nil {
-		tahun = int32(*params.Tahun)
+		rows, err = h.queries.GetComplianceMatrix(reqCtx, pgtype.Int4{Int32: int32(*params.Tahun), Valid: true})
+	} else {
+		rows, err = h.queries.GetComplianceMatrix(reqCtx, pgtype.Int4{Int32: 0, Valid: false})
 	}
 
-	rows, err := h.queries.GetComplianceMatrix(ctx.Request().Context(), tahun)
 	if err != nil {
 		slog.Error("GetDashboardEWS failed", "error", err)
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to retrieve EWS data"})
@@ -185,6 +199,7 @@ func (h *Handler) GetDashboardEWS(ctx echo.Context, params GetDashboardEWSParams
 }
 
 func (h *Handler) ExportPaketExcel(ctx echo.Context, params ExportPaketExcelParams) error {
+	reqCtx := ctx.Request().Context()
 	tahun := int32(0)
 	if params.Tahun != nil {
 		tahun = int32(*params.Tahun)
@@ -209,11 +224,22 @@ func (h *Handler) ExportPaketExcel(ctx echo.Context, params ExportPaketExcelPara
 	limit := int32(1000)
 	offset := int32(0)
 	for {
-		rows, err := h.queries.GetComplianceMatrixPaged(ctx.Request().Context(), db.GetComplianceMatrixPagedParams{
-			TahunAnggaran: tahun,
-			Limit:         limit,
-			Offset:        offset,
-		})
+		var rows []db.GetComplianceMatrixPagedRow
+		var err error
+
+		if params.Tahun != nil {
+			rows, err = h.queries.GetComplianceMatrixPaged(reqCtx, db.GetComplianceMatrixPagedParams{
+				TahunAnggaran: pgtype.Int4{Int32: tahun, Valid: true},
+				Limit:         limit,
+				Offset:        offset,
+			})
+		} else {
+			rows, err = h.queries.GetComplianceMatrixPaged(reqCtx, db.GetComplianceMatrixPagedParams{
+				TahunAnggaran: pgtype.Int4{Int32: 0, Valid: false},
+				Limit:         limit,
+				Offset:        offset,
+			})
+		}
 		if err != nil {
 			slog.Error("ExportPaketExcel failed to fetch data", "error", err)
 			return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to retrieve data for export"})

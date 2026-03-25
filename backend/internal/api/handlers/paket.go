@@ -42,44 +42,23 @@ func (h *Handler) ListPaket(ctx echo.Context, params ListPaketParams) error {
 		offset = 0
 	}
 
-	pakets, err := h.queries.GetComplianceMatrixPaged(ctx.Request().Context(), db.GetComplianceMatrixPagedParams{
-		TahunAnggaran: tahun,
-		Limit:         limit,
-		Offset:        offset,
+	reqCtx := ctx.Request().Context()
+	rows, err := h.queries.GetComplianceMatrixPaged(reqCtx, db.GetComplianceMatrixPagedParams{
+		TahunAnggaran:  pgtype.Int4{Int32: tahun, Valid: true},
+		Limit:  int32(limit),
+		Offset: int32(offset),
 	})
 	if err != nil {
 		slog.Error("GetComplianceMatrixPaged failed", "error", err, "tahun", tahun, "limit", limit, "offset", offset)
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to list paket compliance"})
 	}
 
-	type ComplianceResponse struct {
-		ID                string  `json:"ID"`
-		NamaPaket         string  `json:"NamaPaket"`
-		PaguPaket         string  `json:"PaguPaket"`
-		PaguAnggaran      string  `json:"PaguAnggaran"`
-		RealisasiAnggaran string  `json:"RealisasiAnggaran"`
-		RealisasiFisik    float64 `json:"RealisasiFisik"`
-	}
-
-	response := make([]ComplianceResponse, len(pakets))
-	for i, p := range pakets {
-		idStr := ""
-		if p.ID.Valid {
-			u := uuidToOpenAPI(p.ID)
-			idStr = u.String()
-		}
-
-		response[i] = ComplianceResponse{
-			ID:                idStr,
-			NamaPaket:         p.NamaPaket,
-			PaguPaket:         numericToDecimalString(p.PaguPaket),
-			PaguAnggaran:      numericToDecimalString(p.PaguAnggaran),
-			RealisasiAnggaran: numericToDecimalString(p.RealisasiAnggaran),
-			RealisasiFisik:    numericToFloat64(p.RealisasiFisik),
-		}
-	}
-
-	return ctx.JSON(http.StatusOK, response)
+	return ctx.JSON(http.StatusOK, map[string]interface{}{
+		"data":   rows,
+		"total":  len(rows),
+		"limit":  limit,
+		"offset": offset,
+	})
 }
 
 func (h *Handler) CreatePaket(ctx echo.Context) error {

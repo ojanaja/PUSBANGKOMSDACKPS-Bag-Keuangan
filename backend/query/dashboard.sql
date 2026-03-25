@@ -6,12 +6,8 @@ paket_filtered AS (
     SELECT DISTINCT p.id, p.pagu_paket
     FROM paket_pekerjaan p
     JOIN paket_akun_mapping pam ON p.id = pam.paket_id
-    JOIN anggaran_akun aa ON pam.akun_id = aa.id
-    JOIN anggaran_sub_output aso ON aa.sub_output_id = aso.id
-    JOIN anggaran_output ao ON aso.output_id = ao.id
-    JOIN anggaran_kegiatan ak ON ao.kegiatan_id = ak.id
-    JOIN anggaran_program apr ON ak.program_id = apr.id
-    WHERE (apr.tahun_anggaran = $1 OR $1 = 0)
+    JOIN anggaran_node aa ON pam.akun_id = aa.id
+    WHERE (aa.tahun_anggaran = $1 OR $1 = 0)
 ),
 paket_totals AS (
     SELECT 
@@ -50,12 +46,8 @@ sp2d_bulanan AS (
         ras.bulan as bulan,
         COALESCE(SUM(ras.nilai_cair), 0::numeric)::numeric as total_realisasi_keuangan
     FROM realisasi_anggaran_sp2d ras
-    JOIN anggaran_akun aa ON ras.akun_id = aa.id
-    JOIN anggaran_sub_output aso ON aa.sub_output_id = aso.id
-    JOIN anggaran_output ao ON aso.output_id = ao.id
-    JOIN anggaran_kegiatan ak ON ao.kegiatan_id = ak.id
-    JOIN anggaran_program apr ON ak.program_id = apr.id
-    WHERE (apr.tahun_anggaran = $1 OR $1 = 0)
+    JOIN anggaran_node aa ON ras.akun_id = aa.id
+    WHERE (aa.tahun_anggaran = $1 OR $1 = 0)
     GROUP BY ras.bulan
 ),
 sp2d_kumulatif AS (
@@ -85,12 +77,8 @@ WITH paket_filtered AS (
     SELECT DISTINCT p.id, p.nama_paket, p.pagu_paket
     FROM paket_pekerjaan p
     JOIN paket_akun_mapping pam ON p.id = pam.paket_id
-    JOIN anggaran_akun aa ON pam.akun_id = aa.id
-    JOIN anggaran_sub_output aso ON aa.sub_output_id = aso.id
-    JOIN anggaran_output ao ON aso.output_id = ao.id
-    JOIN anggaran_kegiatan ak ON ao.kegiatan_id = ak.id
-    JOIN anggaran_program apr ON ak.program_id = apr.id
-    WHERE (apr.tahun_anggaran = $2 OR $2 = 0)
+    JOIN anggaran_node aa ON pam.akun_id = aa.id
+    WHERE (aa.tahun_anggaran = $2 OR $2 = 0)
 ),
 pkt_realisasi_rp AS (
     SELECT
