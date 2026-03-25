@@ -8,7 +8,7 @@ services:
     restart: always
     environment:
       POSTGRES_USER: keuangan_admin
-      POSTGRES_PASSWORD: keuangan_password
+      POSTGRES_PASSWORD: NasBpkDbPass2025!
       POSTGRES_DB: keuangan_pusbangkom
     ports:
       - "5432:5432"
@@ -39,7 +39,7 @@ services:
       dockerfile: Dockerfile
     container_name: keuangan-backend
     environment:
-      - DB_URL=postgres://keuangan_admin:keuangan_password@db:5432/keuangan_pusbangkom?sslmode=disable
+      - DB_URL=postgres://keuangan_admin:NasBpkDbPass2025!@db:5432/keuangan_pusbangkom?sslmode=disable
       - JWT_SECRET=keuangan-pusbangkom-jwt-secret-2026
       - CAS_PATH=/app/storage/cas
     ports:

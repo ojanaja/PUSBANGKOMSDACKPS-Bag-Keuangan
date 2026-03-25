@@ -7,7 +7,7 @@ import AppTextButton from '@/shared/ui/AppTextButton'
 import { useNotifications } from '@/features/notifications/application/useNotifications'
 
 const breadcrumbMap: Record<string, string> = {
-    '/anggaran': 'Integrasi Anggaran',
+    '/anggaran': 'Pemantauan Anggaran',
     '/progres-satker': 'Progres Satker',
     '/progres-satker/tambah': 'Tambah Paket',
     '/ews': 'Sistem Peringatan Dini',
@@ -81,7 +81,7 @@ export default function Topbar() {
             className={`fixed top-0 right-0 h-[60px] bg-white border-b border-slate-200 flex items-center justify-between px-6 z-30 transition-all duration-300 ${isCollapsed ? 'left-[72px]' : 'left-[250px]'
                 }`}
         >
-            <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-sm text-slate-500">
+            <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-base text-slate-600">
                 {crumbs.map((crumb, i) => (
                     <span key={crumb.path} className="flex items-center gap-1">
                         {i > 0 && <ChevronRight size={14} className="text-slate-300" />}
@@ -99,7 +99,7 @@ export default function Topbar() {
                         className="relative p-2 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
                         onClick={() => setShowNotifications(!showNotifications)}
                     >
-                        <Bell size={18} />
+                        <Bell size={22} />
                         {notifications.length > 0 && (
                             <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold leading-none px-1">
                                 {notifications.length > 99 ? '99+' : notifications.length}
@@ -110,7 +110,7 @@ export default function Topbar() {
                     {showNotifications && (
                         <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl border border-slate-200 overflow-hidden z-50 shadow-lg">
                             <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                                <span className="text-sm font-bold text-slate-800">Pusat Notifikasi</span>
+                                <span className="text-base font-bold text-slate-800">Pemberitahuan</span>
                                 {notifications.length > 0 ? <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-bold">{notifications.length} baru</span> : null}
                             </div>
                             <div className="max-h-96 overflow-y-auto">
@@ -162,12 +162,12 @@ export default function Topbar() {
                         onClick={() => setShowProfileMenu(!showProfileMenu)}
                         className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition-colors"
                     >
-                        <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
-                            <User size={16} className="text-primary-600" />
+                        <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
+                            <User size={20} className="text-primary-600" />
                         </div>
                         <div className="text-left hidden sm:block">
-                            <p className="text-sm font-medium text-slate-700 leading-tight">{user?.FullName}</p>
-                            <p className="text-xs text-slate-400">{user?.Role}</p>
+                            <p className="text-base font-medium text-slate-700 leading-tight">{user?.FullName}</p>
+                            <p className="text-sm text-slate-500">{user?.Role}</p>
                         </div>
                     </button>
 

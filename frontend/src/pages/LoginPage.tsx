@@ -45,8 +45,8 @@ export default function LoginPage() {
 
                 <div className="bg-white/80 backdrop-blur-md border border-slate-200 rounded-3xl p-8 shadow-2xl shadow-slate-200/50">
                     <div className="mb-8 text-center">
-                        <h2 className="text-xl font-bold text-slate-800">Selamat Datang</h2>
-                        <p className="text-sm text-slate-500 mt-1">Silakan masuk untuk melanjutkan</p>
+                        <h2 className="text-2xl font-bold text-slate-800">Selamat Datang</h2>
+                        <p className="text-base text-slate-600 mt-2">Silakan masuk untuk melanjutkan</p>
                     </div>
 
                     {error && (
@@ -58,8 +58,8 @@ export default function LoginPage() {
 
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div className="group">
-                            <label htmlFor="username" className="block text-sm font-semibold text-slate-700 mb-2 ml-1">
-                                Username
+                            <label htmlFor="username" className="block text-base font-semibold text-slate-700 mb-2 ml-1">
+                                Nama Pengguna
                             </label>
                             <div className="relative">
                                 <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-primary-500 transition-colors" />
@@ -68,17 +68,17 @@ export default function LoginPage() {
                                     type="text"
                                     value={username}
                                     onChange={(e) => setUsername(e.target.value)}
-                                    placeholder="Username anda"
+                                    placeholder="Ketik nama pengguna Anda"
                                     required
                                     autoComplete="username"
-                                    className="w-full pl-12 pr-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 focus:bg-white transition-all"
+                                    className="w-full pl-12 pr-4 py-4 bg-slate-50/50 border border-slate-200 rounded-2xl text-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 focus:bg-white transition-all"
                                 />
                             </div>
                         </div>
 
                         <div className="group">
-                            <label htmlFor="password" className="block text-sm font-semibold text-slate-700 mb-2 ml-1">
-                                Password
+                            <label htmlFor="password" className="block text-base font-semibold text-slate-700 mb-2 ml-1">
+                                Kata Sandi
                             </label>
                             <div className="relative">
                                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-primary-500 transition-colors" />
@@ -90,7 +90,7 @@ export default function LoginPage() {
                                     placeholder="••••••••"
                                     required
                                     autoComplete="current-password"
-                                    className="w-full pl-12 pr-12 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 focus:bg-white transition-all"
+                                    className="w-full pl-12 pr-12 py-4 bg-slate-50/50 border border-slate-200 rounded-2xl text-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 focus:bg-white transition-all"
                                 />
                                 <button
                                     type="button"
@@ -107,9 +107,9 @@ export default function LoginPage() {
                                 type="submit"
                                 disabled={isLoading || !username || !password}
                                 fullWidth
-                                label={isLoading ? 'Memverifikasi akun...' : 'Masuk ke portal'}
+                                label={isLoading ? 'Sedang memproses...' : 'Masuk'}
                                 icon={isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : undefined}
-                                className="py-3.5 font-bold rounded-2xl"
+                                className="py-4 text-lg font-bold rounded-2xl"
                             />
                         </div>
                     </form>
@@ -119,7 +119,7 @@ export default function LoginPage() {
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">
                         PUSBANGKOMSDACKPS
                     </p>
-                    <p className="text-[10px] text-slate-400 font-medium">
+                    <p className="text-xs text-slate-500 font-medium">
                         © 2026 Kementerian Pekerjaan Umum dan Perumahan Rakyat
                     </p>
                 </div>

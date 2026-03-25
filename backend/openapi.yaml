@@ -22,6 +22,45 @@ components:
         message:
           type: string
 
+    AnggaranNode:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+        jenis:
+          type: string
+        kode:
+          type: string
+        uraian:
+          type: string
+        tahun_anggaran:
+          type: integer
+        pagu_revisi:
+          type: string
+        lock_pagu:
+          type: string
+        realisasi_periode_lalu:
+          type: string
+        realisasi_periode_ini:
+          type: string
+        realisasi_sd_periode:
+          type: string
+        persentase_realisasi:
+          type: string
+        sisa_anggaran:
+          type: string
+        level:
+          type: integer
+        path:
+          type: array
+          items:
+            type: string
+
     AnggaranImportResult:
       type: object
       properties:
@@ -372,6 +411,12 @@ paths:
       responses:
         '200':
           description: Anggaran tree data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AnggaranNode'
   /documents:
     post:
       operationId: uploadDocument

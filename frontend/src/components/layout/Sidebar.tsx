@@ -1,13 +1,8 @@
 import { NavLink } from 'react-router-dom'
 import {
-    LayoutDashboard,
     Database,
-    FolderKanban,
-    ShieldAlert,
     ChevronLeft,
     ChevronRight,
-    Users,
-    History,
 } from 'lucide-react'
 import { useAuthStore, type UserRole } from '@/stores/authStore'
 import { useSidebarStore } from '@/stores/sidebarStore'
@@ -21,40 +16,10 @@ interface NavItem {
 
 const navItems: NavItem[] = [
     {
-        label: 'Beranda',
-        path: '/',
-        icon: <LayoutDashboard size={20} />,
-        roles: ['SUPER_ADMIN', 'ADMIN_KEUANGAN', 'PPK', 'PENGAWAS'],
-    },
-    {
-        label: 'Integrasi Anggaran',
+        label: 'Pemantauan Anggaran',
         path: '/anggaran',
-        icon: <Database size={20} />,
-        roles: ['SUPER_ADMIN', 'ADMIN_KEUANGAN'],
-    },
-    {
-        label: 'Progres Satker',
-        path: '/progres-satker',
-        icon: <FolderKanban size={20} />,
-        roles: ['SUPER_ADMIN', 'PPK', 'ADMIN_KEUANGAN', 'PENGAWAS'],
-    },
-    {
-        label: 'Sistem Peringatan Dini',
-        path: '/ews',
-        icon: <ShieldAlert size={20} />,
-        roles: ['SUPER_ADMIN', 'PPK', 'ADMIN_KEUANGAN'],
-    },
-    {
-        label: 'Manajemen Pengguna',
-        path: '/users',
-        icon: <Users size={20} />,
-        roles: ['SUPER_ADMIN'],
-    },
-    {
-        label: 'Jejak Audit',
-        path: '/audit-trail',
-        icon: <History size={20} />,
-        roles: ['SUPER_ADMIN'],
+        icon: <Database size={22} />,
+        roles: ['SUPER_ADMIN', 'ADMIN_KEUANGAN', 'PPK', 'PENGAWAS'],
     },
 ]
 
@@ -78,21 +43,21 @@ export default function Sidebar() {
                     KP
                 </div>
                 {!isCollapsed && (
-                    <span className="font-bold text-lg whitespace-nowrap overflow-hidden text-ellipsis ml-3">
+                    <span className="font-bold text-xl whitespace-nowrap overflow-hidden text-ellipsis ml-3">
                         Keuangan Pusbangkom
                     </span>
                 )}
             </div>
 
             <nav className="flex-1 py-4 overflow-y-auto" aria-label="Menu utama">
-                <ul className="space-y-1 px-2">
+                <ul className="space-y-2 px-2">
                     {filteredNav.map((item) => (
                         <li key={item.path}>
                             <NavLink
                                 to={item.path}
                                 end={item.path === '/'}
                                 className={({ isActive }) =>
-                                    `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group ${isActive
+                                    `flex items-center gap-3 px-3 py-3.5 rounded-lg text-base font-medium transition-all duration-200 group ${isActive
                                         ? 'bg-primary-600 text-white shadow-md shadow-primary-600/30'
                                         : 'text-slate-400 hover:bg-sidebar-hover hover:text-white'
                                     } ${isCollapsed ? 'justify-center' : ''}`

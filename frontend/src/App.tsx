@@ -10,7 +10,6 @@ import AppLayout from './components/layout/AppLayout'
 import AppLoader from '@/shared/ui/AppLoader'
 
 const LoginPage = lazy(() => import('./pages/LoginPage'))
-const DashboardPage = lazy(() => import('./pages/DashboardPage'))
 const AnggaranPage = lazy(() => import('./pages/AnggaranPage'))
 const PaketListPage = lazy(() => import('./pages/PaketListPage'))
 const PaketWizardPage = lazy(() => import('./pages/PaketWizardPage'))
@@ -62,7 +61,7 @@ const router = createBrowserRouter([
       {
         element: <AppLayout />,
         children: [
-          { index: true, element: <Suspense fallback={<PageLoader />}><DashboardPage /></Suspense> },
+          { index: true, element: <Navigate to="/anggaran" replace /> },
           { path: 'anggaran', element: <Suspense fallback={<PageLoader />}><AnggaranPage /></Suspense> },
           { path: 'progres-satker', element: <Suspense fallback={<PageLoader />}><PaketListPage /></Suspense> },
           { path: 'progres-satker/tambah', element: <Suspense fallback={<PageLoader />}><PaketWizardPage /></Suspense> },
