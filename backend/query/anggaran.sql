@@ -1,48 +1,46 @@
--- name: InsertAnggaranProgram :one
-INSERT INTO anggaran_program (id, kode, uraian, tahun_anggaran)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (kode) DO UPDATE SET uraian = EXCLUDED.uraian, tahun_anggaran = EXCLUDED.tahun_anggaran
-RETURNING *;
-
--- name: InsertAnggaranKegiatan :one
-INSERT INTO anggaran_kegiatan (id, program_id, kode, uraian)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (kode) DO UPDATE SET uraian = EXCLUDED.uraian, program_id = EXCLUDED.program_id
-RETURNING *;
-
--- name: InsertAnggaranOutput :one
-INSERT INTO anggaran_output (id, kegiatan_id, kode, uraian)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (kode) DO UPDATE SET uraian = EXCLUDED.uraian, kegiatan_id = EXCLUDED.kegiatan_id
-RETURNING *;
-
--- name: InsertAnggaranSubOutput :one
-INSERT INTO anggaran_sub_output (id, output_id, kode, uraian)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (kode) DO UPDATE SET uraian = EXCLUDED.uraian, output_id = EXCLUDED.output_id
-RETURNING *;
-
--- name: InsertAnggaranAkun :one
-INSERT INTO anggaran_akun (id, sub_output_id, kode, uraian, pagu, realisasi, sisa)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (kode) DO UPDATE SET uraian = EXCLUDED.uraian, sub_output_id = EXCLUDED.sub_output_id, pagu = EXCLUDED.pagu, realisasi = EXCLUDED.realisasi, sisa = EXCLUDED.sisa
+-- name: UpsertAnggaranNode :one
+INSERT INTO anggaran_node (
+    id, parent_id, jenis, kode, uraian, tahun_anggaran, 
+    pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini, 
+    realisasi_sd_periode, persentase_realisasi, sisa_anggaran
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+)
+ON CONFLICT (id) DO UPDATE SET
+    uraian = EXCLUDED.uraian,
+    pagu_revisi = EXCLUDED.pagu_revisi,
+    lock_pagu = EXCLUDED.lock_pagu,
+    realisasi_periode_lalu = EXCLUDED.realisasi_periode_lalu,
+    realisasi_periode_ini = EXCLUDED.realisasi_periode_ini,
+    realisasi_sd_periode = EXCLUDED.realisasi_sd_periode,
+    persentase_realisasi = EXCLUDED.persentase_realisasi,
+    sisa_anggaran = EXCLUDED.sisa_anggaran
 RETURNING *;
 
 -- name: GetAnggaranTree :many
-SELECT
-    sp.id AS program_id, sp.kode AS program_kode, sp.uraian AS program_uraian,
-    sk.id AS kegiatan_id, sk.kode AS kegiatan_kode, sk.uraian AS kegiatan_uraian,
-    so.id AS output_id, so.kode AS output_kode, so.uraian AS output_uraian,
-    ss.id AS sub_output_id, ss.kode AS sub_output_kode, ss.uraian AS sub_output_uraian,
-    sa.id AS akun_id, sa.kode AS akun_kode, sa.uraian AS akun_uraian,
-    sa.pagu, sa.realisasi, sa.sisa
-FROM anggaran_program sp
-JOIN anggaran_kegiatan sk ON sk.program_id = sp.id
-JOIN anggaran_output so ON so.kegiatan_id = sk.id
-JOIN anggaran_sub_output ss ON ss.output_id = so.id
-JOIN anggaran_akun sa ON sa.sub_output_id = ss.id
-WHERE sp.tahun_anggaran = $1
-ORDER BY sp.kode, sk.kode, so.kode, ss.kode, sa.kode;
+WITH RECURSIVE tree AS (
+    SELECT 
+        id, parent_id, jenis, kode, uraian, tahun_anggaran,
+        pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini,
+        realisasi_sd_periode, persentase_realisasi, sisa_anggaran,
+        1 AS level,
+        ARRAY[kode]::text[] AS path
+    FROM anggaran_node a
+    WHERE a.parent_id IS NULL AND a.tahun_anggaran = $1
+
+    UNION ALL
+
+    SELECT 
+        n.id, n.parent_id, n.jenis, n.kode, n.uraian, n.tahun_anggaran,
+        n.pagu_revisi, n.lock_pagu, n.realisasi_periode_lalu, n.realisasi_periode_ini,
+        n.realisasi_sd_periode, n.persentase_realisasi, n.sisa_anggaran,
+        t.level + 1,
+        t.path || n.kode
+    FROM anggaran_node n
+    JOIN tree t ON n.parent_id = t.id
+)
+SELECT * FROM tree
+ORDER BY path;
 
 -- name: InsertRealisasiSP2D :one
 INSERT INTO realisasi_anggaran_sp2d (id, akun_id, bulan, nomor_sp2d, tanggal_sp2d, nilai_cair, keterangan)

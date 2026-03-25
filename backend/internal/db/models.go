@@ -20,42 +20,20 @@ type ActivityLog struct {
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
-type AnggaranAkun struct {
-	ID          pgtype.UUID    `json:"id"`
-	SubOutputID pgtype.UUID    `json:"sub_output_id"`
-	Kode        string         `json:"kode"`
-	Uraian      string         `json:"uraian"`
-	Pagu        pgtype.Numeric `json:"pagu"`
-	Realisasi   pgtype.Numeric `json:"realisasi"`
-	Sisa        pgtype.Numeric `json:"sisa"`
-}
-
-type AnggaranKegiatan struct {
-	ID        pgtype.UUID `json:"id"`
-	ProgramID pgtype.UUID `json:"program_id"`
-	Kode      string      `json:"kode"`
-	Uraian    string      `json:"uraian"`
-}
-
-type AnggaranOutput struct {
-	ID         pgtype.UUID `json:"id"`
-	KegiatanID pgtype.UUID `json:"kegiatan_id"`
-	Kode       string      `json:"kode"`
-	Uraian     string      `json:"uraian"`
-}
-
-type AnggaranProgram struct {
-	ID            pgtype.UUID `json:"id"`
-	Kode          string      `json:"kode"`
-	Uraian        string      `json:"uraian"`
-	TahunAnggaran int32       `json:"tahun_anggaran"`
-}
-
-type AnggaranSubOutput struct {
-	ID       pgtype.UUID `json:"id"`
-	OutputID pgtype.UUID `json:"output_id"`
-	Kode     string      `json:"kode"`
-	Uraian   string      `json:"uraian"`
+type AnggaranNode struct {
+	ID                   pgtype.UUID    `json:"id"`
+	ParentID             pgtype.UUID    `json:"parent_id"`
+	Jenis                string         `json:"jenis"`
+	Kode                 string         `json:"kode"`
+	Uraian               string         `json:"uraian"`
+	TahunAnggaran        pgtype.Int4    `json:"tahun_anggaran"`
+	PaguRevisi           pgtype.Numeric `json:"pagu_revisi"`
+	LockPagu             pgtype.Numeric `json:"lock_pagu"`
+	RealisasiPeriodeLalu pgtype.Numeric `json:"realisasi_periode_lalu"`
+	RealisasiPeriodeIni  pgtype.Numeric `json:"realisasi_periode_ini"`
+	RealisasiSdPeriode   pgtype.Numeric `json:"realisasi_sd_periode"`
+	PersentaseRealisasi  pgtype.Numeric `json:"persentase_realisasi"`
+	SisaAnggaran         pgtype.Numeric `json:"sisa_anggaran"`
 }
 
 type DokumenBukti struct {

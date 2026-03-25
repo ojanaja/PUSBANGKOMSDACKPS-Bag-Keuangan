@@ -1,175 +1,95 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost } from '@/shared/api/httpClient'
 
-export interface AnggaranTreeRow {
-    ProgramID: string
-    ProgramKode: string
-    ProgramUraian: string
-    KegiatanID: string
-    KegiatanKode: string
-    KegiatanUraian: string
-    OutputID: string
-    OutputKode: string
-    OutputUraian: string
-    SubOutputID: string
-    SubOutputKode: string
-    SubOutputUraian: string
-    AkunID: string
-    AkunKode: string
-    AkunUraian: string
-    Pagu: number
-    Realisasi: number
-    Sisa: number
-    program_id?: string
-    program_kode?: string
-    program_uraian?: string
-    kegiatan_id?: string
-    kegiatan_kode?: string
-    kegiatan_uraian?: string
-    output_id?: string
-    output_kode?: string
-    output_uraian?: string
-    sub_output_id?: string
-    sub_output_kode?: string
-    sub_output_uraian?: string
-    akun_id?: string
-    akun_kode?: string
-    akun_uraian?: string
-    pagu?: number
-    realisasi?: number
-    sisa?: number
+export interface APIAnggaranNode {
+    id: string
+    parent_id: string | null
+    jenis: string
+    kode: string
+    uraian: string
+    tahun_anggaran: number
+    pagu_revisi: string
+    lock_pagu: string
+    realisasi_periode_lalu: string
+    realisasi_periode_ini: string
+    realisasi_sd_periode: string
+    persentase_realisasi: string
+    sisa_anggaran: string
+    level: number
+    path: string[]
 }
 
 export interface TreeNode {
     id: string
     kode: string
     uraian: string
-    pagu: number
-    realisasi: number
-    sisa: number
+    pagu_revisi: number
+    lock_pagu: number
+    realisasi_periode_lalu: number
+    realisasi_periode_ini: number
+    realisasi_sd_periode: number
+    persentase_realisasi: number
+    sisa_anggaran: number
     children?: TreeNode[]
 }
 
-export function buildTree(rows: AnggaranTreeRow[]): TreeNode[] {
-    const programMap = new Map<string, TreeNode>()
+export function buildTree(rows: APIAnggaranNode[]): TreeNode[] {
+    const map = new Map<string, TreeNode>()
+    const roots: TreeNode[] = []
 
     for (const row of rows) {
-        const ProgramID = row.ProgramID ?? row.program_id
-        const ProgramKode = row.ProgramKode ?? row.program_kode ?? ''
-        const ProgramUraian = row.ProgramUraian ?? row.program_uraian ?? ''
-        const KegiatanID = row.KegiatanID ?? row.kegiatan_id
-        const KegiatanKode = row.KegiatanKode ?? row.kegiatan_kode ?? ''
-        const KegiatanUraian = row.KegiatanUraian ?? row.kegiatan_uraian ?? ''
-        const OutputID = row.OutputID ?? row.output_id
-        const OutputKode = row.OutputKode ?? row.output_kode ?? ''
-        const OutputUraian = row.OutputUraian ?? row.output_uraian ?? ''
-        const SubOutputID = row.SubOutputID ?? row.sub_output_id
-        const SubOutputKode = row.SubOutputKode ?? row.sub_output_kode ?? ''
-        const SubOutputUraian = row.SubOutputUraian ?? row.sub_output_uraian ?? ''
-        const AkunID = row.AkunID ?? row.akun_id
-        const AkunKode = row.AkunKode ?? row.akun_kode ?? ''
-        const AkunUraian = row.AkunUraian ?? row.akun_uraian ?? ''
-
-        const rawPagu = row.Pagu ?? row.pagu
-        const pagu = typeof rawPagu === 'number' ? rawPagu : (parseFloat(String(rawPagu)) || 0)
-        const rawRealisasi = row.Realisasi ?? row.realisasi
-        const realisasi = typeof rawRealisasi === 'number' ? rawRealisasi : (parseFloat(String(rawRealisasi)) || 0)
-        const rawSisa = row.Sisa ?? row.sisa
-        const sisa = typeof rawSisa === 'number' ? rawSisa : (parseFloat(String(rawSisa)) || 0)
-
-        if (!ProgramID) continue
-
-        if (!programMap.has(ProgramID)) {
-            programMap.set(ProgramID, {
-                id: ProgramID,
-                kode: ProgramKode,
-                uraian: ProgramUraian,
-                pagu: 0, realisasi: 0, sisa: 0,
-                children: [],
-            })
+        const node: TreeNode = {
+            id: row.id,
+            kode: row.kode,
+            uraian: row.uraian,
+            pagu_revisi: parseFloat(row.pagu_revisi) || 0,
+            lock_pagu: parseFloat(row.lock_pagu) || 0,
+            realisasi_periode_lalu: parseFloat(row.realisasi_periode_lalu) || 0,
+            realisasi_periode_ini: parseFloat(row.realisasi_periode_ini) || 0,
+            realisasi_sd_periode: parseFloat(row.realisasi_sd_periode) || 0,
+            persentase_realisasi: parseFloat(row.persentase_realisasi) || 0,
+            sisa_anggaran: parseFloat(row.sisa_anggaran) || 0,
+            children: []
         }
-        const program = programMap.get(ProgramID)!
 
-        let kegiatan = program.children!.find(k => k.id === KegiatanID)
-        if (!kegiatan && KegiatanID) {
-            kegiatan = {
-                id: KegiatanID,
-                kode: KegiatanKode,
-                uraian: KegiatanUraian,
-                pagu: 0, realisasi: 0, sisa: 0,
-                children: [],
+        map.set(node.id, node)
+
+        if (!row.parent_id || row.parent_id === '00000000-0000-0000-0000-000000000000' || !(row.parent_id as any)?.Valid) {
+            let isRoot = true
+            if (typeof row.parent_id === 'string' && row.parent_id !== '00000000-0000-0000-0000-000000000000' && row.parent_id !== '') {
+                isRoot = false
+            } else if (typeof row.parent_id === 'object' && row.parent_id !== null && (row.parent_id as any).Valid) {
+                isRoot = false
+                row.parent_id = (row.parent_id as any).String
             }
-            program.children!.push(kegiatan)
-        }
-        if (!kegiatan) continue
 
-        let output = kegiatan.children!.find(o => o.id === OutputID)
-        if (!output && OutputID) {
-            output = {
-                id: OutputID,
-                kode: OutputKode,
-                uraian: OutputUraian,
-                pagu: 0, realisasi: 0, sisa: 0,
-                children: [],
+            if (isRoot) {
+                roots.push(node)
+                continue
             }
-            kegiatan.children!.push(output)
-        }
-        if (!output) continue
-
-        let subOutput = output.children!.find(s => s.id === SubOutputID)
-        if (!subOutput && SubOutputID) {
-            subOutput = {
-                id: SubOutputID,
-                kode: SubOutputKode,
-                uraian: SubOutputUraian,
-                pagu: 0, realisasi: 0, sisa: 0,
-                children: [],
-            }
-            output.children!.push(subOutput)
-        }
-        if (!subOutput) continue
-
-        const existingAkun = subOutput.children!.find(a => a.id === AkunID)
-        if (existingAkun) {
-            existingAkun.pagu += pagu
-            existingAkun.realisasi += realisasi
-            existingAkun.sisa += sisa
-        } else if (AkunID) {
-            subOutput.children!.push({
-                id: AkunID,
-                kode: AkunKode,
-                uraian: AkunUraian,
-                pagu, realisasi, sisa,
-            })
         }
 
-        subOutput.pagu += pagu
-        subOutput.realisasi += realisasi
-        subOutput.sisa += sisa
-
-        output.pagu += pagu
-        output.realisasi += realisasi
-        output.sisa += sisa
-
-        kegiatan.pagu += pagu
-        kegiatan.realisasi += realisasi
-        kegiatan.sisa += sisa
-
-        program.pagu += pagu
-        program.realisasi += realisasi
-        program.sisa += sisa
+        let parentIdStr = typeof row.parent_id === 'string' ? row.parent_id : (row.parent_id as any)?.String
+        const parent = map.get(parentIdStr)
+        if (parent) {
+            parent.children!.push(node)
+        } else {
+            roots.push(node)
+        }
     }
 
-    return Array.from(programMap.values())
+    return roots
 }
 
-export function useAnggaran(tahun: number) {
+export function useAnggaran(tahun: number, bulan?: number) {
     const queryClient = useQueryClient()
 
     const query = useQuery({
-        queryKey: ['anggaran', tahun],
+        queryKey: ['anggaran', tahun, bulan],
         queryFn: async () => {
-            const data = await apiGet<AnggaranTreeRow[]>(`/anggaran/tree?tahun=${tahun}`)
+            const params = new URLSearchParams({ tahun: tahun.toString() })
+            if (bulan) params.append('bulan', bulan.toString())
+            const data = await apiGet<APIAnggaranNode[]>(`/anggaran/tree?${params.toString()}`)
             return buildTree(data || [])
         }
     })
@@ -196,9 +116,22 @@ export function useAnggaran(tahun: number) {
         }
     })
 
+    const uploadBuktiMutation = useMutation({
+        mutationFn: async ({ id, file }: { id: string, file: File }) => {
+            const formData = new FormData()
+            formData.append('file', file)
+            formData.append('node_id', id)
+            return apiPost('/anggaran/upload-bukti', formData)
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['anggaran'] })
+        }
+    })
+
     return {
         query,
         importMutation,
-        manualMutation
+        manualMutation,
+        uploadBuktiMutation
     }
 }

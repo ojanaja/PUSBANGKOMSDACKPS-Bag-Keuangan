@@ -11,174 +11,33 @@ import (
 
 var nonNumericChars = regexp.MustCompile(`[^0-9,.-]`)
 
-type AnggaranRow struct {
-	ProgramKode     string
-	ProgramUraian   string
-	KegiatanKode    string
-	KegiatanUraian  string
-	OutputKode      string
-	OutputUraian    string
-	SubOutputKode   string
-	SubOutputUraian string
-	AkunKode        string
-	AkunUraian      string
-	Pagu            string
-	Realisasi       string
-	Sisa            string
+type AnggaranNodeImport struct {
+	Level         int
+	Jenis         string
+	Kode          string
+	Uraian        string
+	PaguRevisi    string
+	LockPagu      string
+	RealisasiLalu string
+	RealisasiIni  string
+	RealisasiSD   string
+	Persentase    string
+	Sisa          string
+	ParentLevel   int
 }
 
-func ParseAnggaranCSV(r io.Reader) ([]AnggaranRow, error) {
+func ParseAnggaranCSVStream(r io.Reader, handle func(AnggaranNodeImport) error) (int, error) {
 	reader := csv.NewReader(r)
 	reader.TrimLeadingSpace = true
 	reader.LazyQuotes = true
-
-	header, err := reader.Read()
-	if err != nil {
-		return nil, fmt.Errorf("failed to read CSV header: %w", err)
-	}
-
-	colIndex := make(map[string]int)
-	for i, col := range header {
-		colIndex[normalizeHeader(col)] = i
-	}
-
-	requiredCols := []string{"programkode", "programuraian", "kegiatankode", "kegiatanuraian",
-		"outputkode", "outputuraian", "suboutputkode", "suboutputuraian",
-		"akunkode", "akunuraian", "pagu", "realisasi", "sisa"}
-	for _, col := range requiredCols {
-		if _, ok := colIndex[col]; !ok {
-			return nil, fmt.Errorf("missing required column: %s", col)
-		}
-	}
-
-	var rows []AnggaranRow
-	var lastNonEmpty AnggaranRow
-	lineNum := 1
-	for {
-		record, err := reader.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("error reading CSV line %d: %w", lineNum+1, err)
-		}
-		lineNum++
-
-		programKode := normalizeValue(getCell(record, colIndex, "programkode"))
-		programUraian := normalizeValue(getCell(record, colIndex, "programuraian"))
-		kegiatanKode := normalizeValue(getCell(record, colIndex, "kegiatankode"))
-		kegiatanUraian := normalizeValue(getCell(record, colIndex, "kegiatanuraian"))
-		outputKode := normalizeValue(getCell(record, colIndex, "outputkode"))
-		outputUraian := normalizeValue(getCell(record, colIndex, "outputuraian"))
-		subOutputKode := normalizeValue(getCell(record, colIndex, "suboutputkode"))
-		subOutputUraian := normalizeValue(getCell(record, colIndex, "suboutputuraian"))
-		akunKode := normalizeValue(getCell(record, colIndex, "akunkode"))
-		akunUraian := normalizeValue(getCell(record, colIndex, "akunuraian"))
-
-		if programKode == "" {
-			programKode = lastNonEmpty.ProgramKode
-		}
-		if programUraian == "" {
-			programUraian = lastNonEmpty.ProgramUraian
-		}
-		if kegiatanKode == "" {
-			kegiatanKode = lastNonEmpty.KegiatanKode
-		}
-		if kegiatanUraian == "" {
-			kegiatanUraian = lastNonEmpty.KegiatanUraian
-		}
-		if outputKode == "" {
-			outputKode = lastNonEmpty.OutputKode
-		}
-		if outputUraian == "" {
-			outputUraian = lastNonEmpty.OutputUraian
-		}
-		if subOutputKode == "" {
-			subOutputKode = lastNonEmpty.SubOutputKode
-		}
-		if subOutputUraian == "" {
-			subOutputUraian = lastNonEmpty.SubOutputUraian
-		}
-
-		pagu, err := parseFlexibleDecimal(getCell(record, colIndex, "pagu"))
-		if err != nil {
-			return nil, fmt.Errorf("invalid pagu at CSV line %d: %w", lineNum, err)
-		}
-		realisasi, err := parseFlexibleDecimal(getCell(record, colIndex, "realisasi"))
-		if err != nil {
-			return nil, fmt.Errorf("invalid realisasi at CSV line %d: %w", lineNum, err)
-		}
-		sisa, err := parseFlexibleDecimal(getCell(record, colIndex, "sisa"))
-		if err != nil {
-			return nil, fmt.Errorf("invalid sisa at CSV line %d: %w", lineNum, err)
-		}
-
-		if programKode == "" || kegiatanKode == "" || outputKode == "" || subOutputKode == "" || akunKode == "" {
-			return nil, fmt.Errorf("invalid hierarchy/code at CSV line %d", lineNum)
-		}
-
-		rows = append(rows, AnggaranRow{
-			ProgramKode:     programKode,
-			ProgramUraian:   programUraian,
-			KegiatanKode:    kegiatanKode,
-			KegiatanUraian:  kegiatanUraian,
-			OutputKode:      outputKode,
-			OutputUraian:    outputUraian,
-			SubOutputKode:   subOutputKode,
-			SubOutputUraian: subOutputUraian,
-			AkunKode:        akunKode,
-			AkunUraian:      akunUraian,
-			Pagu:            pagu,
-			Realisasi:       realisasi,
-			Sisa:            sisa,
-		})
-
-		lastNonEmpty = AnggaranRow{
-			ProgramKode:     programKode,
-			ProgramUraian:   programUraian,
-			KegiatanKode:    kegiatanKode,
-			KegiatanUraian:  kegiatanUraian,
-			OutputKode:      outputKode,
-			OutputUraian:    outputUraian,
-			SubOutputKode:   subOutputKode,
-			SubOutputUraian: subOutputUraian,
-		}
-	}
-
-	if len(rows) == 0 {
-		return nil, fmt.Errorf("CSV file contains no data rows")
-	}
-
-	return rows, nil
-}
-
-func ParseAnggaranCSVStream(r io.Reader, handle func(AnggaranRow) error) (int, error) {
-	reader := csv.NewReader(r)
-	reader.TrimLeadingSpace = true
-	reader.LazyQuotes = true
-
-	header, err := reader.Read()
-	if err != nil {
-		return 0, fmt.Errorf("failed to read CSV header: %w", err)
-	}
-
-	colIndex := make(map[string]int)
-	for i, col := range header {
-		colIndex[normalizeHeader(col)] = i
-	}
-
-	requiredCols := []string{"programkode", "programuraian", "kegiatankode", "kegiatanuraian",
-		"outputkode", "outputuraian", "suboutputkode", "suboutputuraian",
-		"akunkode", "akunuraian", "pagu", "realisasi", "sisa"}
-	for _, col := range requiredCols {
-		if _, ok := colIndex[col]; !ok {
-			return 0, fmt.Errorf("missing required column: %s", col)
-		}
-	}
+	reader.Comma = ';'
+	reader.FieldsPerRecord = -1 
 
 	count := 0
-	var lastNonEmpty AnggaranRow
-	lineNum := 1
+	lineNum := 0
+    
+    var lastNodeAtLevel [10]AnggaranNodeImport 
+
 	for {
 		record, err := reader.Read()
 		if err == io.EOF {
@@ -189,127 +48,167 @@ func ParseAnggaranCSVStream(r io.Reader, handle func(AnggaranRow) error) (int, e
 		}
 		lineNum++
 
-		programKode := normalizeValue(getCell(record, colIndex, "programkode"))
-		programUraian := normalizeValue(getCell(record, colIndex, "programuraian"))
-		kegiatanKode := normalizeValue(getCell(record, colIndex, "kegiatankode"))
-		kegiatanUraian := normalizeValue(getCell(record, colIndex, "kegiatanuraian"))
-		outputKode := normalizeValue(getCell(record, colIndex, "outputkode"))
-		outputUraian := normalizeValue(getCell(record, colIndex, "outputuraian"))
-		subOutputKode := normalizeValue(getCell(record, colIndex, "suboutputkode"))
-		subOutputUraian := normalizeValue(getCell(record, colIndex, "suboutputuraian"))
-		akunKode := normalizeValue(getCell(record, colIndex, "akunkode"))
-		akunUraian := normalizeValue(getCell(record, colIndex, "akunuraian"))
-
-		if programKode == "" {
-			programKode = lastNonEmpty.ProgramKode
-		}
-		if programUraian == "" {
-			programUraian = lastNonEmpty.ProgramUraian
-		}
-		if kegiatanKode == "" {
-			kegiatanKode = lastNonEmpty.KegiatanKode
-		}
-		if kegiatanUraian == "" {
-			kegiatanUraian = lastNonEmpty.KegiatanUraian
-		}
-		if outputKode == "" {
-			outputKode = lastNonEmpty.OutputKode
-		}
-		if outputUraian == "" {
-			outputUraian = lastNonEmpty.OutputUraian
-		}
-		if subOutputKode == "" {
-			subOutputKode = lastNonEmpty.SubOutputKode
-		}
-		if subOutputUraian == "" {
-			subOutputUraian = lastNonEmpty.SubOutputUraian
+		if len(record) < 10 {
+			continue
 		}
 
-		pagu, err := parseFlexibleDecimal(getCell(record, colIndex, "pagu"))
-		if err != nil {
-			return count, fmt.Errorf("invalid pagu at CSV line %d: %w", lineNum, err)
-		}
-		realisasi, err := parseFlexibleDecimal(getCell(record, colIndex, "realisasi"))
-		if err != nil {
-			return count, fmt.Errorf("invalid realisasi at CSV line %d: %w", lineNum, err)
-		}
-		sisa, err := parseFlexibleDecimal(getCell(record, colIndex, "sisa"))
-		if err != nil {
-			return count, fmt.Errorf("invalid sisa at CSV line %d: %w", lineNum, err)
+		if strings.Contains(strings.ToUpper(record[0]), "LAPORAN") || strings.Contains(strings.ToUpper(record[0]), "Uraian") || strings.Contains(strings.ToUpper(record[0]), "JUMLAH") {
+			continue
 		}
 
-		if programKode == "" || kegiatanKode == "" || outputKode == "" || subOutputKode == "" || akunKode == "" {
-			return count, fmt.Errorf("invalid hierarchy/code at CSV line %d", lineNum)
+		node, isRelevant := parseRow(record)
+		if !isRelevant {
+			continue
 		}
 
-		row := AnggaranRow{
-			ProgramKode:     programKode,
-			ProgramUraian:   programUraian,
-			KegiatanKode:    kegiatanKode,
-			KegiatanUraian:  kegiatanUraian,
-			OutputKode:      outputKode,
-			OutputUraian:    outputUraian,
-			SubOutputKode:   subOutputKode,
-			SubOutputUraian: subOutputUraian,
-			AkunKode:        akunKode,
-			AkunUraian:      akunUraian,
-			Pagu:            pagu,
-			Realisasi:       realisasi,
-			Sisa:            sisa,
-		}
+        parentLevel := -1
+        for i := node.Level - 1; i >= 0; i-- {
+            if lastNodeAtLevel[i].Kode != "" {
+                parentLevel = i
+                break
+            }
+        }
+        node.ParentLevel = parentLevel
 
-		if err := handle(row); err != nil {
+		if err := handle(node); err != nil {
 			return count, fmt.Errorf("error handling CSV line %d: %w", lineNum, err)
 		}
+        
+        lastNodeAtLevel[node.Level] = node
+        for i := node.Level + 1; i < 10; i++ {
+            lastNodeAtLevel[i] = AnggaranNodeImport{}
+        }
+
 		count++
-
-		lastNonEmpty = AnggaranRow{
-			ProgramKode:     programKode,
-			ProgramUraian:   programUraian,
-			KegiatanKode:    kegiatanKode,
-			KegiatanUraian:  kegiatanUraian,
-			OutputKode:      outputKode,
-			OutputUraian:    outputUraian,
-			SubOutputKode:   subOutputKode,
-			SubOutputUraian: subOutputUraian,
-		}
-	}
-
-	if count == 0 {
-		return 0, fmt.Errorf("CSV file contains no data rows")
 	}
 
 	return count, nil
 }
 
-func normalizeHeader(input string) string {
-	cleaned := strings.ToLower(strings.TrimSpace(input))
-	cleaned = strings.ReplaceAll(cleaned, " ", "")
-	cleaned = strings.ReplaceAll(cleaned, "_", "")
-	cleaned = strings.ReplaceAll(cleaned, "-", "")
-	return cleaned
-}
+func parseRow(record []string) (AnggaranNodeImport, bool) {
+	node := AnggaranNodeImport{}
+	isRelevant := false
 
-func normalizeValue(input string) string {
-	trimmed := strings.TrimSpace(input)
-	if trimmed == "-" {
-		return ""
+	col1 := strings.TrimSpace(safeGet(record, 1))
+	col2 := strings.TrimSpace(safeGet(record, 2))
+	col4 := strings.TrimSpace(safeGet(record, 4))
+	col5 := strings.TrimSpace(safeGet(record, 5))
+	col7 := strings.TrimSpace(safeGet(record, 7))
+	col14 := strings.TrimSpace(safeGet(record, 14))
+
+    col11 := strings.TrimSpace(safeGet(record, 11))
+    col12 := strings.TrimSpace(safeGet(record, 12))
+    dateRegex := regexp.MustCompile(`^\d{2}-\d{2}-\d{4}$`)
+    
+    if dateRegex.MatchString(col1) && (col11 != "" || col12 != "") {
+        node.Level = 8
+        node.Jenis = "TRANSAKSI"
+        sp2d := col11
+        if sp2d == "" { sp2d = col12 }
+        node.Kode = col1 + " | " + sp2d
+        node.Uraian = strings.TrimSpace(safeGet(record, 17))
+        if node.Uraian == "" {
+            node.Uraian = strings.TrimSpace(safeGet(record, 16))
+        }
+        isRelevant = true
+    } else if col1 != "" {
+		if !strings.Contains(col1, ".") {
+			node.Level = 0
+			node.Jenis = "PROGRAM"
+			node.Kode = col1
+			node.Uraian = strings.TrimSpace(safeGet(record, 3))
+			isRelevant = true
+		} else {
+			node.Level = 1
+			node.Jenis = "KEGIATAN"
+			node.Kode = col1
+			node.Uraian = strings.TrimSpace(safeGet(record, 7))
+			isRelevant = true
+		}
+	} else if col2 != "" {
+		if !strings.Contains(col2, ".") {
+			node.Level = 2
+			node.Jenis = "OUTPUT_GROUP"
+			node.Kode = col2
+			node.Uraian = strings.TrimSpace(safeGet(record, 6))
+			isRelevant = true
+		} else {
+			node.Level = 3
+			node.Jenis = "OUTPUT"
+			node.Kode = col2
+			node.Uraian = strings.TrimSpace(safeGet(record, 8))
+			isRelevant = true
+		}
+	} else if col4 != "" {
+		node.Level = 4
+		node.Jenis = "SUBOUTPUT_GROUP"
+		node.Kode = col4
+		node.Uraian = strings.TrimSpace(safeGet(record, 9))
+		isRelevant = true
+	} else if col5 != "" {
+		node.Level = 5
+		node.Jenis = "SUBOUTPUT"
+		node.Kode = col5
+		node.Uraian = strings.TrimSpace(safeGet(record, 11))
+		isRelevant = true
+	} else if col7 != "" {
+		node.Level = 6
+		node.Jenis = "AKUN"
+		node.Kode = col7
+		node.Uraian = strings.TrimSpace(safeGet(record, 13))
+		isRelevant = true
+	} else if col14 != "" {
+		node.Level = 7
+		node.Jenis = "ITEM"
+		parts := strings.SplitN(col14, ".", 2)
+		if len(parts) == 2 {
+			node.Kode = strings.TrimSpace(parts[0])
+			node.Uraian = strings.TrimSpace(parts[1])
+		} else {
+			node.Kode = col14
+			node.Uraian = col14
+		}
+		isRelevant = true
 	}
-	return trimmed
-}
 
-func getCell(record []string, colIndex map[string]int, key string) string {
-	idx, ok := colIndex[key]
-	if !ok || idx < 0 || idx >= len(record) {
-		return ""
+	if !isRelevant {
+		return node, false
 	}
-	return record[idx]
+
+    paguCol := 18
+    lockCol := 20
+    laluCol := 24
+    iniCol := 25
+    sdCol := 28
+    perCol := 31
+    sisaCol := 34
+
+    if node.Level == 8 {
+        iniCol = 26
+    }
+
+	node.PaguRevisi = parseFlexibleDecimal(safeGet(record, paguCol))
+	node.LockPagu = parseFlexibleDecimal(safeGet(record, lockCol))
+	node.RealisasiLalu = parseFlexibleDecimal(safeGet(record, laluCol))
+	node.RealisasiIni = parseFlexibleDecimal(safeGet(record, iniCol))
+	node.RealisasiSD = parseFlexibleDecimal(safeGet(record, sdCol))
+	node.Persentase = parseFlexiblePercent(safeGet(record, perCol))
+	node.Sisa = parseFlexibleDecimal(safeGet(record, sisaCol))
+
+	return node, true
 }
 
-func parseFlexibleDecimal(raw string) (string, error) {
+func safeGet(record []string, idx int) string {
+	if idx >= 0 && idx < len(record) {
+		return record[idx]
+	}
+	return ""
+}
+
+func parseFlexibleDecimal(raw string) string {
 	value := strings.TrimSpace(raw)
 	if value == "" || value == "-" {
-		return "0", nil
+		return "0"
 	}
 
 	value = strings.ReplaceAll(value, "Rp", "")
@@ -329,7 +228,7 @@ func parseFlexibleDecimal(raw string) (string, error) {
 	}
 
 	if value == "" || value == "." || value == "-" || value == "-." {
-		return "0", nil
+		return "0"
 	}
 	if strings.HasPrefix(value, ".") {
 		value = "0" + value
@@ -340,8 +239,13 @@ func parseFlexibleDecimal(raw string) (string, error) {
 
 	var rat big.Rat
 	if _, ok := rat.SetString(value); !ok {
-		return "", fmt.Errorf("invalid decimal: %q", raw)
+		return "0"
 	}
 
-	return value, nil
+	return value
+}
+
+func parseFlexiblePercent(raw string) string {
+    val := parseFlexibleDecimal(raw)
+    return val
 }

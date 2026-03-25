@@ -28,10 +28,10 @@ export default function AnggaranTreeRow({ node, level = 0 }: TreeRowProps) {
                         <span className="text-sm text-slate-700">{node.uraian}</span>
                     </div>
                 </td>
-                <td className="px-6 py-3 text-right text-sm tabular-nums">{formatCurrency(node.pagu)}</td>
-                <td className="px-6 py-3 text-right text-sm tabular-nums">{formatCurrency(node.realisasi)}</td>
-                <td className={`px-6 py-3 text-right text-sm tabular-nums font-semibold ${node.sisa < 0 ? 'text-red-600' : 'text-slate-600'}`}>
-                    {formatCurrency(node.sisa)}
+                <td className="px-6 py-3 text-right text-sm tabular-nums">{formatCurrency(node.pagu_revisi)}</td>
+                <td className="px-6 py-3 text-right text-sm tabular-nums">{formatCurrency(node.realisasi_sd_periode)}</td>
+                <td className={`px-6 py-3 text-right text-sm tabular-nums font-semibold ${node.sisa_anggaran < 0 ? 'text-red-600' : 'text-slate-600'}`}>
+                    {formatCurrency(node.sisa_anggaran)}
                 </td>
             </tr>
             {open && hasChildren && node.children!.map((child, index) => (

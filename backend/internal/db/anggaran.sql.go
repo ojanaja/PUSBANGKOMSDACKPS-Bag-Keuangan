@@ -12,44 +12,50 @@ import (
 )
 
 const getAnggaranTree = `-- name: GetAnggaranTree :many
-SELECT
-    sp.id AS program_id, sp.kode AS program_kode, sp.uraian AS program_uraian,
-    sk.id AS kegiatan_id, sk.kode AS kegiatan_kode, sk.uraian AS kegiatan_uraian,
-    so.id AS output_id, so.kode AS output_kode, so.uraian AS output_uraian,
-    ss.id AS sub_output_id, ss.kode AS sub_output_kode, ss.uraian AS sub_output_uraian,
-    sa.id AS akun_id, sa.kode AS akun_kode, sa.uraian AS akun_uraian,
-    sa.pagu, sa.realisasi, sa.sisa
-FROM anggaran_program sp
-JOIN anggaran_kegiatan sk ON sk.program_id = sp.id
-JOIN anggaran_output so ON so.kegiatan_id = sk.id
-JOIN anggaran_sub_output ss ON ss.output_id = so.id
-JOIN anggaran_akun sa ON sa.sub_output_id = ss.id
-WHERE sp.tahun_anggaran = $1
-ORDER BY sp.kode, sk.kode, so.kode, ss.kode, sa.kode
+WITH RECURSIVE tree AS (
+    SELECT 
+        id, parent_id, jenis, kode, uraian, tahun_anggaran,
+        pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini,
+        realisasi_sd_periode, persentase_realisasi, sisa_anggaran,
+        1 AS level,
+        ARRAY[kode]::text[] AS path
+    FROM anggaran_node a
+    WHERE a.parent_id IS NULL AND a.tahun_anggaran = $1
+
+    UNION ALL
+
+    SELECT 
+        n.id, n.parent_id, n.jenis, n.kode, n.uraian, n.tahun_anggaran,
+        n.pagu_revisi, n.lock_pagu, n.realisasi_periode_lalu, n.realisasi_periode_ini,
+        n.realisasi_sd_periode, n.persentase_realisasi, n.sisa_anggaran,
+        t.level + 1,
+        t.path || n.kode
+    FROM anggaran_node n
+    JOIN tree t ON n.parent_id = t.id
+)
+SELECT id, parent_id, jenis, kode, uraian, tahun_anggaran, pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini, realisasi_sd_periode, persentase_realisasi, sisa_anggaran, level, path FROM tree
+ORDER BY path
 `
 
 type GetAnggaranTreeRow struct {
-	ProgramID       pgtype.UUID    `json:"program_id"`
-	ProgramKode     string         `json:"program_kode"`
-	ProgramUraian   string         `json:"program_uraian"`
-	KegiatanID      pgtype.UUID    `json:"kegiatan_id"`
-	KegiatanKode    string         `json:"kegiatan_kode"`
-	KegiatanUraian  string         `json:"kegiatan_uraian"`
-	OutputID        pgtype.UUID    `json:"output_id"`
-	OutputKode      string         `json:"output_kode"`
-	OutputUraian    string         `json:"output_uraian"`
-	SubOutputID     pgtype.UUID    `json:"sub_output_id"`
-	SubOutputKode   string         `json:"sub_output_kode"`
-	SubOutputUraian string         `json:"sub_output_uraian"`
-	AkunID          pgtype.UUID    `json:"akun_id"`
-	AkunKode        string         `json:"akun_kode"`
-	AkunUraian      string         `json:"akun_uraian"`
-	Pagu            pgtype.Numeric `json:"pagu"`
-	Realisasi       pgtype.Numeric `json:"realisasi"`
-	Sisa            pgtype.Numeric `json:"sisa"`
+	ID                   pgtype.UUID    `json:"id"`
+	ParentID             pgtype.UUID    `json:"parent_id"`
+	Jenis                string         `json:"jenis"`
+	Kode                 string         `json:"kode"`
+	Uraian               string         `json:"uraian"`
+	TahunAnggaran        pgtype.Int4    `json:"tahun_anggaran"`
+	PaguRevisi           pgtype.Numeric `json:"pagu_revisi"`
+	LockPagu             pgtype.Numeric `json:"lock_pagu"`
+	RealisasiPeriodeLalu pgtype.Numeric `json:"realisasi_periode_lalu"`
+	RealisasiPeriodeIni  pgtype.Numeric `json:"realisasi_periode_ini"`
+	RealisasiSdPeriode   pgtype.Numeric `json:"realisasi_sd_periode"`
+	PersentaseRealisasi  pgtype.Numeric `json:"persentase_realisasi"`
+	SisaAnggaran         pgtype.Numeric `json:"sisa_anggaran"`
+	Level                int32          `json:"level"`
+	Path                 []string       `json:"path"`
 }
 
-func (q *Queries) GetAnggaranTree(ctx context.Context, tahunAnggaran int32) ([]GetAnggaranTreeRow, error) {
+func (q *Queries) GetAnggaranTree(ctx context.Context, tahunAnggaran pgtype.Int4) ([]GetAnggaranTreeRow, error) {
 	rows, err := q.db.Query(ctx, getAnggaranTree, tahunAnggaran)
 	if err != nil {
 		return nil, err
@@ -59,24 +65,21 @@ func (q *Queries) GetAnggaranTree(ctx context.Context, tahunAnggaran int32) ([]G
 	for rows.Next() {
 		var i GetAnggaranTreeRow
 		if err := rows.Scan(
-			&i.ProgramID,
-			&i.ProgramKode,
-			&i.ProgramUraian,
-			&i.KegiatanID,
-			&i.KegiatanKode,
-			&i.KegiatanUraian,
-			&i.OutputID,
-			&i.OutputKode,
-			&i.OutputUraian,
-			&i.SubOutputID,
-			&i.SubOutputKode,
-			&i.SubOutputUraian,
-			&i.AkunID,
-			&i.AkunKode,
-			&i.AkunUraian,
-			&i.Pagu,
-			&i.Realisasi,
-			&i.Sisa,
+			&i.ID,
+			&i.ParentID,
+			&i.Jenis,
+			&i.Kode,
+			&i.Uraian,
+			&i.TahunAnggaran,
+			&i.PaguRevisi,
+			&i.LockPagu,
+			&i.RealisasiPeriodeLalu,
+			&i.RealisasiPeriodeIni,
+			&i.RealisasiSdPeriode,
+			&i.PersentaseRealisasi,
+			&i.SisaAnggaran,
+			&i.Level,
+			&i.Path,
 		); err != nil {
 			return nil, err
 		}
@@ -128,170 +131,6 @@ func (q *Queries) GetRealisasiByAkunAndBulan(ctx context.Context, arg GetRealisa
 	return items, nil
 }
 
-const insertAnggaranAkun = `-- name: InsertAnggaranAkun :one
-INSERT INTO anggaran_akun (id, sub_output_id, kode, uraian, pagu, realisasi, sisa)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (kode) DO UPDATE SET uraian = EXCLUDED.uraian, sub_output_id = EXCLUDED.sub_output_id, pagu = EXCLUDED.pagu, realisasi = EXCLUDED.realisasi, sisa = EXCLUDED.sisa
-RETURNING id, sub_output_id, kode, uraian, pagu, realisasi, sisa
-`
-
-type InsertAnggaranAkunParams struct {
-	ID          pgtype.UUID    `json:"id"`
-	SubOutputID pgtype.UUID    `json:"sub_output_id"`
-	Kode        string         `json:"kode"`
-	Uraian      string         `json:"uraian"`
-	Pagu        pgtype.Numeric `json:"pagu"`
-	Realisasi   pgtype.Numeric `json:"realisasi"`
-	Sisa        pgtype.Numeric `json:"sisa"`
-}
-
-func (q *Queries) InsertAnggaranAkun(ctx context.Context, arg InsertAnggaranAkunParams) (AnggaranAkun, error) {
-	row := q.db.QueryRow(ctx, insertAnggaranAkun,
-		arg.ID,
-		arg.SubOutputID,
-		arg.Kode,
-		arg.Uraian,
-		arg.Pagu,
-		arg.Realisasi,
-		arg.Sisa,
-	)
-	var i AnggaranAkun
-	err := row.Scan(
-		&i.ID,
-		&i.SubOutputID,
-		&i.Kode,
-		&i.Uraian,
-		&i.Pagu,
-		&i.Realisasi,
-		&i.Sisa,
-	)
-	return i, err
-}
-
-const insertAnggaranKegiatan = `-- name: InsertAnggaranKegiatan :one
-INSERT INTO anggaran_kegiatan (id, program_id, kode, uraian)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (kode) DO UPDATE SET uraian = EXCLUDED.uraian, program_id = EXCLUDED.program_id
-RETURNING id, program_id, kode, uraian
-`
-
-type InsertAnggaranKegiatanParams struct {
-	ID        pgtype.UUID `json:"id"`
-	ProgramID pgtype.UUID `json:"program_id"`
-	Kode      string      `json:"kode"`
-	Uraian    string      `json:"uraian"`
-}
-
-func (q *Queries) InsertAnggaranKegiatan(ctx context.Context, arg InsertAnggaranKegiatanParams) (AnggaranKegiatan, error) {
-	row := q.db.QueryRow(ctx, insertAnggaranKegiatan,
-		arg.ID,
-		arg.ProgramID,
-		arg.Kode,
-		arg.Uraian,
-	)
-	var i AnggaranKegiatan
-	err := row.Scan(
-		&i.ID,
-		&i.ProgramID,
-		&i.Kode,
-		&i.Uraian,
-	)
-	return i, err
-}
-
-const insertAnggaranOutput = `-- name: InsertAnggaranOutput :one
-INSERT INTO anggaran_output (id, kegiatan_id, kode, uraian)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (kode) DO UPDATE SET uraian = EXCLUDED.uraian, kegiatan_id = EXCLUDED.kegiatan_id
-RETURNING id, kegiatan_id, kode, uraian
-`
-
-type InsertAnggaranOutputParams struct {
-	ID         pgtype.UUID `json:"id"`
-	KegiatanID pgtype.UUID `json:"kegiatan_id"`
-	Kode       string      `json:"kode"`
-	Uraian     string      `json:"uraian"`
-}
-
-func (q *Queries) InsertAnggaranOutput(ctx context.Context, arg InsertAnggaranOutputParams) (AnggaranOutput, error) {
-	row := q.db.QueryRow(ctx, insertAnggaranOutput,
-		arg.ID,
-		arg.KegiatanID,
-		arg.Kode,
-		arg.Uraian,
-	)
-	var i AnggaranOutput
-	err := row.Scan(
-		&i.ID,
-		&i.KegiatanID,
-		&i.Kode,
-		&i.Uraian,
-	)
-	return i, err
-}
-
-const insertAnggaranProgram = `-- name: InsertAnggaranProgram :one
-INSERT INTO anggaran_program (id, kode, uraian, tahun_anggaran)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (kode) DO UPDATE SET uraian = EXCLUDED.uraian, tahun_anggaran = EXCLUDED.tahun_anggaran
-RETURNING id, kode, uraian, tahun_anggaran
-`
-
-type InsertAnggaranProgramParams struct {
-	ID            pgtype.UUID `json:"id"`
-	Kode          string      `json:"kode"`
-	Uraian        string      `json:"uraian"`
-	TahunAnggaran int32       `json:"tahun_anggaran"`
-}
-
-func (q *Queries) InsertAnggaranProgram(ctx context.Context, arg InsertAnggaranProgramParams) (AnggaranProgram, error) {
-	row := q.db.QueryRow(ctx, insertAnggaranProgram,
-		arg.ID,
-		arg.Kode,
-		arg.Uraian,
-		arg.TahunAnggaran,
-	)
-	var i AnggaranProgram
-	err := row.Scan(
-		&i.ID,
-		&i.Kode,
-		&i.Uraian,
-		&i.TahunAnggaran,
-	)
-	return i, err
-}
-
-const insertAnggaranSubOutput = `-- name: InsertAnggaranSubOutput :one
-INSERT INTO anggaran_sub_output (id, output_id, kode, uraian)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (kode) DO UPDATE SET uraian = EXCLUDED.uraian, output_id = EXCLUDED.output_id
-RETURNING id, output_id, kode, uraian
-`
-
-type InsertAnggaranSubOutputParams struct {
-	ID       pgtype.UUID `json:"id"`
-	OutputID pgtype.UUID `json:"output_id"`
-	Kode     string      `json:"kode"`
-	Uraian   string      `json:"uraian"`
-}
-
-func (q *Queries) InsertAnggaranSubOutput(ctx context.Context, arg InsertAnggaranSubOutputParams) (AnggaranSubOutput, error) {
-	row := q.db.QueryRow(ctx, insertAnggaranSubOutput,
-		arg.ID,
-		arg.OutputID,
-		arg.Kode,
-		arg.Uraian,
-	)
-	var i AnggaranSubOutput
-	err := row.Scan(
-		&i.ID,
-		&i.OutputID,
-		&i.Kode,
-		&i.Uraian,
-	)
-	return i, err
-}
-
 const insertRealisasiSP2D = `-- name: InsertRealisasiSP2D :one
 INSERT INTO realisasi_anggaran_sp2d (id, akun_id, bulan, nomor_sp2d, tanggal_sp2d, nilai_cair, keterangan)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -328,6 +167,77 @@ func (q *Queries) InsertRealisasiSP2D(ctx context.Context, arg InsertRealisasiSP
 		&i.NilaiCair,
 		&i.Keterangan,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const upsertAnggaranNode = `-- name: UpsertAnggaranNode :one
+INSERT INTO anggaran_node (
+    id, parent_id, jenis, kode, uraian, tahun_anggaran, 
+    pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini, 
+    realisasi_sd_periode, persentase_realisasi, sisa_anggaran
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+)
+ON CONFLICT (id) DO UPDATE SET
+    uraian = EXCLUDED.uraian,
+    pagu_revisi = EXCLUDED.pagu_revisi,
+    lock_pagu = EXCLUDED.lock_pagu,
+    realisasi_periode_lalu = EXCLUDED.realisasi_periode_lalu,
+    realisasi_periode_ini = EXCLUDED.realisasi_periode_ini,
+    realisasi_sd_periode = EXCLUDED.realisasi_sd_periode,
+    persentase_realisasi = EXCLUDED.persentase_realisasi,
+    sisa_anggaran = EXCLUDED.sisa_anggaran
+RETURNING id, parent_id, jenis, kode, uraian, tahun_anggaran, pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini, realisasi_sd_periode, persentase_realisasi, sisa_anggaran
+`
+
+type UpsertAnggaranNodeParams struct {
+	ID                   pgtype.UUID    `json:"id"`
+	ParentID             pgtype.UUID    `json:"parent_id"`
+	Jenis                string         `json:"jenis"`
+	Kode                 string         `json:"kode"`
+	Uraian               string         `json:"uraian"`
+	TahunAnggaran        pgtype.Int4    `json:"tahun_anggaran"`
+	PaguRevisi           pgtype.Numeric `json:"pagu_revisi"`
+	LockPagu             pgtype.Numeric `json:"lock_pagu"`
+	RealisasiPeriodeLalu pgtype.Numeric `json:"realisasi_periode_lalu"`
+	RealisasiPeriodeIni  pgtype.Numeric `json:"realisasi_periode_ini"`
+	RealisasiSdPeriode   pgtype.Numeric `json:"realisasi_sd_periode"`
+	PersentaseRealisasi  pgtype.Numeric `json:"persentase_realisasi"`
+	SisaAnggaran         pgtype.Numeric `json:"sisa_anggaran"`
+}
+
+func (q *Queries) UpsertAnggaranNode(ctx context.Context, arg UpsertAnggaranNodeParams) (AnggaranNode, error) {
+	row := q.db.QueryRow(ctx, upsertAnggaranNode,
+		arg.ID,
+		arg.ParentID,
+		arg.Jenis,
+		arg.Kode,
+		arg.Uraian,
+		arg.TahunAnggaran,
+		arg.PaguRevisi,
+		arg.LockPagu,
+		arg.RealisasiPeriodeLalu,
+		arg.RealisasiPeriodeIni,
+		arg.RealisasiSdPeriode,
+		arg.PersentaseRealisasi,
+		arg.SisaAnggaran,
+	)
+	var i AnggaranNode
+	err := row.Scan(
+		&i.ID,
+		&i.ParentID,
+		&i.Jenis,
+		&i.Kode,
+		&i.Uraian,
+		&i.TahunAnggaran,
+		&i.PaguRevisi,
+		&i.LockPagu,
+		&i.RealisasiPeriodeLalu,
+		&i.RealisasiPeriodeIni,
+		&i.RealisasiSdPeriode,
+		&i.PersentaseRealisasi,
+		&i.SisaAnggaran,
 	)
 	return i, err
 }
