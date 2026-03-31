@@ -11,6 +11,62 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getAnggaranDokumenByID = `-- name: GetAnggaranDokumenByID :one
+SELECT id, anggaran_node_id, file_hash_sha256, original_name, mime_type, file_size_bytes, uploaded_by, created_at FROM anggaran_dokumen_bukti
+WHERE id = $1
+`
+
+func (q *Queries) GetAnggaranDokumenByID(ctx context.Context, id pgtype.UUID) (AnggaranDokumenBukti, error) {
+	row := q.db.QueryRow(ctx, getAnggaranDokumenByID, id)
+	var i AnggaranDokumenBukti
+	err := row.Scan(
+		&i.ID,
+		&i.AnggaranNodeID,
+		&i.FileHashSha256,
+		&i.OriginalName,
+		&i.MimeType,
+		&i.FileSizeBytes,
+		&i.UploadedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getAnggaranDokumenByNode = `-- name: GetAnggaranDokumenByNode :many
+SELECT id, anggaran_node_id, file_hash_sha256, original_name, mime_type, file_size_bytes, uploaded_by, created_at FROM anggaran_dokumen_bukti
+WHERE anggaran_node_id = $1
+ORDER BY created_at DESC
+`
+
+func (q *Queries) GetAnggaranDokumenByNode(ctx context.Context, anggaranNodeID pgtype.UUID) ([]AnggaranDokumenBukti, error) {
+	rows, err := q.db.Query(ctx, getAnggaranDokumenByNode, anggaranNodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AnggaranDokumenBukti
+	for rows.Next() {
+		var i AnggaranDokumenBukti
+		if err := rows.Scan(
+			&i.ID,
+			&i.AnggaranNodeID,
+			&i.FileHashSha256,
+			&i.OriginalName,
+			&i.MimeType,
+			&i.FileSizeBytes,
+			&i.UploadedBy,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getAnggaranTree = `-- name: GetAnggaranTree :many
 WITH RECURSIVE tree AS (
     SELECT 
@@ -129,6 +185,46 @@ func (q *Queries) GetRealisasiByAkunAndBulan(ctx context.Context, arg GetRealisa
 		return nil, err
 	}
 	return items, nil
+}
+
+const insertAnggaranDokumen = `-- name: InsertAnggaranDokumen :one
+INSERT INTO anggaran_dokumen_bukti (id, anggaran_node_id, file_hash_sha256, original_name, mime_type, file_size_bytes, uploaded_by)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, anggaran_node_id, file_hash_sha256, original_name, mime_type, file_size_bytes, uploaded_by, created_at
+`
+
+type InsertAnggaranDokumenParams struct {
+	ID             pgtype.UUID `json:"id"`
+	AnggaranNodeID pgtype.UUID `json:"anggaran_node_id"`
+	FileHashSha256 string      `json:"file_hash_sha256"`
+	OriginalName   string      `json:"original_name"`
+	MimeType       string      `json:"mime_type"`
+	FileSizeBytes  int64       `json:"file_size_bytes"`
+	UploadedBy     pgtype.UUID `json:"uploaded_by"`
+}
+
+func (q *Queries) InsertAnggaranDokumen(ctx context.Context, arg InsertAnggaranDokumenParams) (AnggaranDokumenBukti, error) {
+	row := q.db.QueryRow(ctx, insertAnggaranDokumen,
+		arg.ID,
+		arg.AnggaranNodeID,
+		arg.FileHashSha256,
+		arg.OriginalName,
+		arg.MimeType,
+		arg.FileSizeBytes,
+		arg.UploadedBy,
+	)
+	var i AnggaranDokumenBukti
+	err := row.Scan(
+		&i.ID,
+		&i.AnggaranNodeID,
+		&i.FileHashSha256,
+		&i.OriginalName,
+		&i.MimeType,
+		&i.FileSizeBytes,
+		&i.UploadedBy,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const insertRealisasiSP2D = `-- name: InsertRealisasiSP2D :one

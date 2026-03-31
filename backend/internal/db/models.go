@@ -20,6 +20,17 @@ type ActivityLog struct {
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
+type AnggaranDokumenBukti struct {
+	ID             pgtype.UUID        `json:"id"`
+	AnggaranNodeID pgtype.UUID        `json:"anggaran_node_id"`
+	FileHashSha256 string             `json:"file_hash_sha256"`
+	OriginalName   string             `json:"original_name"`
+	MimeType       string             `json:"mime_type"`
+	FileSizeBytes  int64              `json:"file_size_bytes"`
+	UploadedBy     pgtype.UUID        `json:"uploaded_by"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
 type AnggaranNode struct {
 	ID                   pgtype.UUID    `json:"id"`
 	ParentID             pgtype.UUID    `json:"parent_id"`

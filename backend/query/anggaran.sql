@@ -51,3 +51,17 @@ RETURNING *;
 SELECT * FROM realisasi_anggaran_sp2d
 WHERE akun_id = $1 AND bulan = $2
 ORDER BY tanggal_sp2d;
+
+-- name: InsertAnggaranDokumen :one
+INSERT INTO anggaran_dokumen_bukti (id, anggaran_node_id, file_hash_sha256, original_name, mime_type, file_size_bytes, uploaded_by)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING *;
+
+-- name: GetAnggaranDokumenByNode :many
+SELECT * FROM anggaran_dokumen_bukti
+WHERE anggaran_node_id = $1
+ORDER BY created_at DESC;
+
+-- name: GetAnggaranDokumenByID :one
+SELECT * FROM anggaran_dokumen_bukti
+WHERE id = $1;
