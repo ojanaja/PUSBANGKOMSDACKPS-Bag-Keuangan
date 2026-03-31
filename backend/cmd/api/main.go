@@ -162,6 +162,8 @@ func main() {
 	apiGroup.POST("/anggaran/import", wrapper.ImportAnggaranData)
 	apiGroup.POST("/anggaran/manual", wrapper.CreateManualAnggaran)
 	apiGroup.GET("/anggaran/tree", wrapper.GetAnggaranTree)
+	apiGroup.POST("/anggaran/upload-bukti", wrapper.UploadBuktiAnggaran)
+	apiGroup.GET("/anggaran/:id/documents", wrapper.GetAnggaranDokumenByNode)
 	apiGroup.GET("/audit-logs", wrapper.ListAuditLogs, authmw.RequireRole("SUPER_ADMIN"))
 	apiGroup.GET("/dashboard/chart", wrapper.GetDashboardChart)
 	apiGroup.GET("/dashboard/drilldown", wrapper.GetDashboardDrilldown)

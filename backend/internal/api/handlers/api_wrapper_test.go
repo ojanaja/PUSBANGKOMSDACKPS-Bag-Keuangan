@@ -21,6 +21,9 @@ func (s *wrapperTestServer) CreateManualAnggaran(ctx echo.Context) error {
 func (s *wrapperTestServer) GetAnggaranTree(ctx echo.Context, params GetAnggaranTreeParams) error {
 	return ctx.NoContent(http.StatusNoContent)
 }
+func (s *wrapperTestServer) UploadBuktiAnggaran(ctx echo.Context) error {
+	return ctx.NoContent(http.StatusNoContent)
+}
 func (s *wrapperTestServer) ListAuditLogs(ctx echo.Context, params ListAuditLogsParams) error {
 	return ctx.NoContent(http.StatusNoContent)
 }

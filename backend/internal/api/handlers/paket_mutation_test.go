@@ -20,6 +20,32 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+type fakeImportTx struct {
+	pgx.Tx
+	commitErr  error
+	execFn     func(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	queryRowFn func(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+func (m *fakeImportTx) Commit(ctx context.Context) error {
+	return m.commitErr
+}
+func (m *fakeImportTx) Rollback(ctx context.Context) error {
+	return nil
+}
+func (m *fakeImportTx) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	if m.execFn != nil {
+		return m.execFn(ctx, sql, args...)
+	}
+	return pgconn.CommandTag{}, nil
+}
+func (m *fakeImportTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	if m.queryRowFn != nil {
+		return m.queryRowFn(ctx, sql, args...)
+	}
+	return &handlerFakeRow{err: errors.New("unexpected query row in tx")}
+}
+
 func TestPaketMutations_UpdateDelete(t *testing.T) {
 	e := echo.New()
 	paketID := uuid.New()

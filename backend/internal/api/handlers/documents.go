@@ -120,23 +120,40 @@ func (h *Handler) UploadDocument(ctx echo.Context) error {
 }
 
 func (h *Handler) DownloadDocument(ctx echo.Context, id openapi_types.UUID) error {
-	doc, err := h.queries.GetDocumentByID(ctx.Request().Context(), uuidToPgUUID(id))
-	if err != nil {
-		slog.Error("GetDocumentByID failed", "error", err, "id", id)
-		return ctx.JSON(http.StatusNotFound, map[string]string{"message": "document not found"})
+	pgId := uuidToPgUUID(uuid.UUID(id))
+
+	var fileHashSha256 string
+	var mimeType string
+	var originalName string
+
+	doc, err := h.queries.GetDocumentByID(ctx.Request().Context(), pgId)
+	if err == nil {
+		fileHashSha256 = doc.FileHashSha256
+		mimeType = doc.MimeType
+		originalName = doc.OriginalName
+	} else {
+		anggaranDoc, aErr := h.queries.GetAnggaranDokumenByID(ctx.Request().Context(), pgId)
+		if aErr == nil {
+			fileHashSha256 = anggaranDoc.FileHashSha256
+			mimeType = anggaranDoc.MimeType
+			originalName = anggaranDoc.OriginalName
+		} else {
+			slog.Error("Document not found in both tables", "id", id, "err_doc", err, "err_anggaran", aErr)
+			return ctx.JSON(http.StatusNotFound, map[string]string{"message": "document not found"})
+		}
 	}
 
-	if !h.cas.Exists(doc.FileHashSha256) {
-		slog.Error("File missing in CAS", "hash", doc.FileHashSha256)
+	if !h.cas.Exists(fileHashSha256) {
+		slog.Error("File missing in CAS", "hash", fileHashSha256)
 		return ctx.JSON(http.StatusNotFound, map[string]string{"message": "file content not found"})
 	}
 
-	path := h.cas.GetPath(doc.FileHashSha256)
-	ctx.Response().Header().Set(echo.HeaderContentType, doc.MimeType)
+	path := h.cas.GetPath(fileHashSha256)
+	ctx.Response().Header().Set(echo.HeaderContentType, mimeType)
 
 	disposition := "inline"
 	if ctx.QueryParam("download") == "true" {
-		disposition = fmt.Sprintf("attachment; filename=%q", doc.OriginalName)
+		disposition = fmt.Sprintf("attachment; filename=%q", originalName)
 	}
 	ctx.Response().Header().Set(echo.HeaderContentDisposition, disposition)
 	return ctx.File(path)
