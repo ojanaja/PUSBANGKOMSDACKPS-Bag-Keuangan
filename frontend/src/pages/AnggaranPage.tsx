@@ -1,7 +1,8 @@
 import { useState, useRef } from 'react'
-import { Upload, ChevronRight, X, RefreshCw, AlertCircle, CheckCircle2, Loader2, Plus, FolderKanban, FileText, Database } from 'lucide-react'
-import { useAnggaran, type TreeNode } from '@/features/anggaran/application/useAnggaran'
+import { Upload, ChevronRight, X, RefreshCw, AlertCircle, CheckCircle2, Loader2, Plus, FolderKanban, FileText, Database, Eye, ExternalLink } from 'lucide-react'
+import { useAnggaran, useAnggaranDokumen, type TreeNode } from '@/features/anggaran/application/useAnggaran'
 import FileDropzone from '@/features/progres/components/FileDropzone'
+import { apiUrl } from '@/shared/api/httpClient'
 import { formatCurrency } from '@/lib/formatCurrency'
 import { FISCAL_YEAR_OPTIONS } from '@/shared/config/constants'
 
@@ -98,6 +99,8 @@ export default function AnggaranPage() {
     const [uploadTarget, setUploadTarget] = useState<TreeNode | null>(null)
 
     const { query, importMutation, manualMutation, uploadBuktiMutation } = useAnggaran(tahun, bulan)
+    const { data: uploadDocuments = [], refetch: refetchDocuments, isLoading: loadingDocs } = useAnggaranDokumen(uploadTarget?.id || null)
+
     const tree = query.data || []
     const loading = query.isLoading
     const error = query.error instanceof Error ? query.error.message : null
@@ -607,13 +610,56 @@ export default function AnggaranPage() {
                                         try {
                                             await uploadBuktiMutation.mutateAsync({ id: uploadTarget.id, file: files[0] })
                                             alert('Dokumen berhasil diunggah')
-                                            setUploadTarget(null)
+                                            refetchDocuments()
                                         } catch (e) {
                                             alert('Gagal mengunggah dokumen')
                                         }
                                     }
                                 }} 
                             />
+
+                            <div className="mt-6 space-y-3">
+                                {loadingDocs ? (
+                                    <div className="flex items-center justify-center py-4">
+                                        <Loader2 size={24} className="text-primary-500 animate-spin" />
+                                    </div>
+                                ) : uploadDocuments.length === 0 ? (
+                                    <div className="text-center py-4 text-sm text-slate-500">
+                                        Belum ada dokumen yang diunggah.
+                                    </div>
+                                ) : (
+                                    uploadDocuments.map(doc => (
+                                        <div key={doc.id} className="flex flex-col gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl group hover:border-primary-300 transition-colors">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 bg-white rounded-lg shadow-sm">
+                                                    <FileText size={20} className="text-primary-500" />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-semibold text-slate-800 truncate" title={doc.original_name}>{doc.original_name}</p>
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        <span className="text-[10px] text-slate-500 font-medium bg-slate-100 px-1.5 py-0.5 rounded uppercase tracking-wide">
+                                                            {(doc.file_size_bytes / 1024).toFixed(1)} KB
+                                                        </span>
+                                                        <span className="text-xs text-slate-400">
+                                                            {new Date(doc.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    {doc.mime_type.startsWith('image/') || doc.mime_type === 'application/pdf' ? (
+                                                        <a href={apiUrl(`/documents/${doc.id}`)} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 text-sky-700 hover:bg-sky-100 rounded-lg text-xs font-bold transition-all border border-sky-100" title="Lihat Dokumen">
+                                                            <Eye size={14} /> Lihat
+                                                        </a>
+                                                    ) : null}
+                                                    <a href={apiUrl(`/documents/${doc.id}?download=true`)} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg text-xs font-bold transition-all border border-indigo-100" title="Unduh Dokumen">
+                                                        <ExternalLink size={14} /> Unduh
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
 
                             <div className="flex items-center justify-end gap-3 mt-6">
                                 <button

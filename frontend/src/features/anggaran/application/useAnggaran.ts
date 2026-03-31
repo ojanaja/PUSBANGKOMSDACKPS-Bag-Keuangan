@@ -135,3 +135,25 @@ export function useAnggaran(tahun: number, bulan?: number) {
         uploadBuktiMutation
     }
 }
+
+export interface AnggaranDokumenItem {
+	id: string
+	anggaran_node_id: string
+	file_hash_sha256: string
+	original_name: string
+	mime_type: string
+	file_size_bytes: number
+	created_at: string
+}
+
+export function useAnggaranDokumen(nodeId: string | null) {
+	return useQuery({
+		queryKey: ['anggaran', 'documents', nodeId],
+		queryFn: async () => {
+			if (!nodeId) return []
+			const data = await apiGet<AnggaranDokumenItem[]>(`/anggaran/${nodeId}/documents`)
+			return data || []
+		},
+		enabled: !!nodeId
+	})
+}
