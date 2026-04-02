@@ -42,6 +42,7 @@ services:
       - DB_URL=postgres://keuangan_admin:NasBpkDbPass2025!@db:5432/keuangan_pusbangkom?sslmode=disable
       - JWT_SECRET=keuangan-pusbangkom-jwt-secret-2026
       - CAS_PATH=/app/storage/cas
+      - COOKIE_SECURE=false
     ports:
       - "8080:8080"
     volumes:
