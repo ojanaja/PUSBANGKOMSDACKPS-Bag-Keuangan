@@ -1,7 +1,8 @@
 import { useState, useRef } from 'react'
-import { Upload, ChevronRight, X, RefreshCw, AlertCircle, CheckCircle2, Loader2, Plus, FolderKanban, FileText, Database, Eye, ExternalLink } from 'lucide-react'
+import { Upload, ChevronRight, X, RefreshCw, AlertCircle, CheckCircle2, Loader2, Plus, FolderKanban, FileText, Database, Eye, ExternalLink, Edit2 } from 'lucide-react'
 import { useAnggaran, useAnggaranDokumen, type TreeNode } from '@/features/anggaran/application/useAnggaran'
 import FileDropzone from '@/features/progres/components/FileDropzone'
+import EditPaguModal from '@/features/anggaran/components/EditPaguModal'
 import { apiUrl } from '@/shared/api/httpClient'
 import { formatCurrency } from '@/lib/formatCurrency'
 import { FISCAL_YEAR_OPTIONS } from '@/shared/config/constants'
@@ -39,7 +40,7 @@ function Breadcrumbs({ path, onNavigate }: { path: TreeNode[], onNavigate: (inde
     )
 }
 
-function FolderRow({ node, onClick, onUpload }: { node: TreeNode; onClick: () => void; onUpload: (node: TreeNode) => void }) {
+function FolderRow({ node, onClick, onUpload, onEdit }: { node: TreeNode; onClick: () => void; onUpload: (node: TreeNode) => void; onEdit: (node: TreeNode) => void }) {
     const hasChildren = node.children && node.children.length > 0
     const persentase = node.pagu_revisi > 0 ? (node.realisasi_sd_periode / node.pagu_revisi) * 100 : 0
     
@@ -76,14 +77,24 @@ function FolderRow({ node, onClick, onUpload }: { node: TreeNode; onClick: () =>
             </td>
             <td className="px-6 py-5 text-center border-b border-slate-100 align-top">
                 {!hasChildren && (
-                    <button 
-                        onClick={(e) => { e.stopPropagation(); onUpload(node); }}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors border border-slate-200" 
-                        title="Unggah dokumen bukti"
-                    >
-                        <Upload size={18} />
-                        <span>Unggah</span>
-                    </button>
+                    <div className="flex flex-col items-center gap-2">
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); onEdit(node); }}
+                            className="inline-flex w-full items-center justify-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors border border-slate-200" 
+                            title="Edit Pagu & Realisasi"
+                        >
+                            <Edit2 size={16} />
+                            <span>Edit Data</span>
+                        </button>
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); onUpload(node); }}
+                            className="inline-flex w-full items-center justify-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors border border-slate-200" 
+                            title="Unggah dokumen bukti"
+                        >
+                            <Upload size={16} />
+                            <span>Dokumen</span>
+                        </button>
+                    </div>
                 )}
             </td>
         </tr>
@@ -95,10 +106,11 @@ export default function AnggaranPage() {
     const [isDragging, setIsDragging] = useState(false)
     const [tahun, setTahun] = useState(new Date().getFullYear())
     const [bulan, setBulan] = useState(new Date().getMonth() + 1)
-    const [currentPath, setCurrentPath] = useState<TreeNode[]>([])
+    const [currentPathIds, setCurrentPathIds] = useState<string[]>([])
     const [uploadTarget, setUploadTarget] = useState<TreeNode | null>(null)
+    const [editTarget, setEditTarget] = useState<TreeNode | null>(null)
 
-    const { query, importMutation, manualMutation, uploadBuktiMutation } = useAnggaran(tahun, bulan)
+    const { query, importMutation, manualMutation, updatePaguMutation, uploadBuktiMutation } = useAnggaran(tahun, bulan)
     const { data: uploadDocuments = [], refetch: refetchDocuments, isLoading: loadingDocs } = useAnggaranDokumen(uploadTarget?.id || null)
 
     const tree = query.data || []
@@ -202,6 +214,16 @@ export default function AnggaranPage() {
         }
     }
 
+    const currentPath: TreeNode[] = []
+    let currLevelNodes = tree
+    for (const id of currentPathIds) {
+        const found = currLevelNodes.find(n => n.id === id)
+        if (found) {
+            currentPath.push(found)
+            currLevelNodes = found.children || []
+        }
+    }
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -214,7 +236,7 @@ export default function AnggaranPage() {
                         <label className="text-base text-slate-600 font-medium">Tahun:</label>
                         <select
                             value={tahun}
-                            onChange={(e) => { setTahun(Number(e.target.value)); setCurrentPath([]); }}
+                            onChange={(e) => { setTahun(Number(e.target.value)); setCurrentPathIds([]); }}
                             className="border border-slate-200 rounded-lg px-3 py-3 text-base bg-white"
                         >
                             {FISCAL_YEAR_OPTIONS.map(y => (
@@ -226,7 +248,7 @@ export default function AnggaranPage() {
                         <label className="text-base text-slate-600 font-medium">Bulan:</label>
                         <select
                             value={bulan}
-                            onChange={(e) => { setBulan(Number(e.target.value)); setCurrentPath([]); }}
+                            onChange={(e) => { setBulan(Number(e.target.value)); setCurrentPathIds([]); }}
                             className="border border-slate-200 rounded-lg px-3 py-3 text-base bg-white"
                         >
                             {MONTH_OPTIONS.map(m => (
@@ -276,10 +298,16 @@ export default function AnggaranPage() {
                 </div>
             </div>
 
-            {tree.length > 0 && !loading && !error && (
+            {currentPath.length > 0 && !loading && !error && (
                 <Breadcrumbs 
                     path={currentPath} 
-                    onNavigate={(idx) => setCurrentPath(idx === -1 ? [] : currentPath.slice(0, idx + 1))} 
+                    onNavigate={(idx) => {
+                        if (idx === -1) {
+                            setCurrentPathIds([])
+                        } else {
+                            setCurrentPathIds(currentPathIds.slice(0, idx + 1))
+                        }
+                    }} 
                 />
             )}
 
@@ -341,9 +369,12 @@ export default function AnggaranPage() {
                                         <FolderRow 
                                             key={node.id || `node-${index}`} 
                                             node={node} 
-                                            onClick={() => setCurrentPath([...currentPath, node])}
+                                            onClick={() => setCurrentPathIds([...currentPathIds, node.id])}
                                             onUpload={(n) => {
                                                 setUploadTarget(n)
+                                            }}
+                                            onEdit={(n) => {
+                                                setEditTarget(n)
                                             }}
                                         />
                                     ))
@@ -673,6 +704,14 @@ export default function AnggaranPage() {
                     </div>
                 )
             }
+
+            {editTarget && (
+                <EditPaguModal 
+                    node={editTarget} 
+                    onClose={() => setEditTarget(null)} 
+                    updatePaguMutation={updatePaguMutation} 
+                />
+            )}
         </div >
     )
 }

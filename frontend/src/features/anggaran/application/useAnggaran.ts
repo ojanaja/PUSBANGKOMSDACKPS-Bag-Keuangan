@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiGet, apiPost } from '@/shared/api/httpClient'
+import { apiGet, apiPost, apiPut } from '@/shared/api/httpClient'
 
 export interface APIAnggaranNode {
     id: string
@@ -116,6 +116,15 @@ export function useAnggaran(tahun: number, bulan?: number) {
         }
     })
 
+    const updatePaguMutation = useMutation({
+        mutationFn: async ({ id, data }: { id: string, data: Record<string, string> }) => {
+            return apiPut(`/anggaran/${id}`, data)
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['anggaran'] })
+        }
+    })
+
     const uploadBuktiMutation = useMutation({
         mutationFn: async ({ id, file }: { id: string, file: File }) => {
             const formData = new FormData()
@@ -132,6 +141,7 @@ export function useAnggaran(tahun: number, bulan?: number) {
         query,
         importMutation,
         manualMutation,
+        updatePaguMutation,
         uploadBuktiMutation
     }
 }

@@ -118,6 +118,16 @@ components:
         - realisasi
         - sisa
 
+    UpdateAnggaranRequest:
+      type: object
+      properties:
+        pagu_revisi:
+          type: string
+        realisasi_periode_lalu:
+          type: string
+        realisasi_periode_ini:
+          type: string
+
     DocumentMeta:
       type: object
       properties:
@@ -468,6 +478,39 @@ paths:
           description: Unauthorized
         '500':
           description: Internal Server Error
+  /anggaran/{id}:
+    put:
+      operationId: updateAnggaranNode
+      summary: Update bottom-level anggaran and rollup
+      tags: [Anggaran]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAnggaranRequest'
+      responses:
+        '200':
+          description: Anggaran updated and rolled up successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          description: Bad request
+        '404':
+          description: Node not found
+
   /anggaran/{id}/documents:
     get:
       operationId: getAnggaranDokumenByNode

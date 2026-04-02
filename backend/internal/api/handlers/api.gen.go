@@ -308,6 +308,13 @@ type ManualAnggaranRequest struct {
 	TahunAnggaran   int    `json:"tahun_anggaran"`
 }
 
+// UpdateAnggaranRequest defines model for UpdateAnggaranRequest.
+type UpdateAnggaranRequest struct {
+	PaguRevisi           *string `json:"pagu_revisi,omitempty"`
+	RealisasiPeriodeIni  *string `json:"realisasi_periode_ini,omitempty"`
+	RealisasiPeriodeLalu *string `json:"realisasi_periode_lalu,omitempty"`
+}
+
 // NotificationItem defines model for NotificationItem.
 type NotificationItem struct {
 	Detail  *string               `json:"detail,omitempty"`
@@ -471,6 +478,9 @@ type UpdatePaketJSONRequestBody UpdatePaketJSONBody
 // UpdateRealisasiFisikJSONRequestBody defines body for UpdateRealisasiFisik for application/json ContentType.
 type UpdateRealisasiFisikJSONRequestBody UpdateRealisasiFisikJSONBody
 
+// UpdateAnggaranNodeJSONRequestBody defines body for UpdateAnggaranNode for application/json ContentType.
+type UpdateAnggaranNodeJSONRequestBody = UpdateAnggaranRequest
+
 // CreateUserJSONRequestBody defines body for CreateUser for application/json ContentType.
 type CreateUserJSONRequestBody = CreateUserRequest
 
@@ -494,6 +504,9 @@ type ServerInterface interface {
 	// Get Anggaran hierarchy tree
 	// (GET /anggaran/tree)
 	GetAnggaranTree(ctx echo.Context, params GetAnggaranTreeParams) error
+	// Update bottom-level anggaran and rollup
+	// (PUT /anggaran/{id})
+	UpdateAnggaranNode(ctx echo.Context, id openapi_types.UUID) error
 	// Upload a document as proof for an anggaran node
 	// (POST /anggaran/upload-bukti)
 	UploadBuktiAnggaran(ctx echo.Context) error
@@ -615,6 +628,24 @@ func (w *ServerInterfaceWrapper) GetAnggaranTree(ctx echo.Context) error {
 
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.GetAnggaranTree(ctx, params)
+	return err
+}
+
+// UpdateAnggaranNode converts echo context to params.
+func (w *ServerInterfaceWrapper) UpdateAnggaranNode(ctx echo.Context) error {
+	var err error
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", ctx.Param("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter id: %s", err))
+	}
+
+	ctx.Set(CookieAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.UpdateAnggaranNode(ctx, id)
 	return err
 }
 
@@ -1088,6 +1119,7 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 	router.POST(baseURL+"/anggaran/import", wrapper.ImportAnggaranData)
 	router.POST(baseURL+"/anggaran/manual", wrapper.CreateManualAnggaran)
 	router.GET(baseURL+"/anggaran/tree", wrapper.GetAnggaranTree)
+	router.PUT(baseURL+"/anggaran/:id", wrapper.UpdateAnggaranNode)
 	router.POST(baseURL+"/anggaran/upload-bukti", wrapper.UploadBuktiAnggaran)
 	router.GET(baseURL+"/anggaran/:id/documents", wrapper.GetAnggaranDokumenByNode)
 	router.GET(baseURL+"/audit-logs", wrapper.ListAuditLogs)

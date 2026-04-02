@@ -134,6 +134,99 @@ func (h *Handler) GetAnggaranTree(ctx echo.Context, params GetAnggaranTreeParams
 	return ctx.JSON(http.StatusOK, rows)
 }
 
+func (h *Handler) UpdateAnggaranNode(ctx echo.Context, id types.UUID) error {
+	var req UpdateAnggaranRequest
+	if err := ctx.Bind(&req); err != nil {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "invalid request body"})
+	}
+
+	reqCtx := ctx.Request().Context()
+	tx, err := h.pool.Begin(reqCtx)
+	if err != nil {
+		slog.Error("Begin tx failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to begin transaction"})
+	}
+	defer func() {
+		_ = tx.Rollback(reqCtx)
+	}()
+
+	var paguRevisi pgtype.Numeric
+	paguRevisi.Valid = false
+	if req.PaguRevisi != nil {
+		paguRevisi = mustDecimalNumeric(*req.PaguRevisi)
+	}
+
+	var realisasiIni pgtype.Numeric
+	realisasiIni.Valid = false
+	if req.RealisasiPeriodeIni != nil {
+		realisasiIni = mustDecimalNumeric(*req.RealisasiPeriodeIni)
+	}
+
+	var realisasiLalu pgtype.Numeric
+	realisasiLalu.Valid = false
+	if req.RealisasiPeriodeLalu != nil {
+		realisasiLalu = mustDecimalNumeric(*req.RealisasiPeriodeLalu)
+	}
+
+	nodeID := uuidToPgUUID(uuid.UUID(id))
+
+	_, err = tx.Exec(reqCtx, `
+		UPDATE anggaran_node 
+		SET pagu_revisi = COALESCE($1, pagu_revisi),
+			realisasi_periode_ini = COALESCE($2, realisasi_periode_ini),
+			realisasi_periode_lalu = COALESCE($3, realisasi_periode_lalu)
+		WHERE id = $4
+	`, paguRevisi, realisasiIni, realisasiLalu, nodeID)
+	if err != nil {
+		slog.Error("Update node failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to update node"})
+	}
+
+	currNode := nodeID
+	for {
+		_, err = tx.Exec(reqCtx, `
+			UPDATE anggaran_node
+			SET realisasi_sd_periode = realisasi_periode_lalu + realisasi_periode_ini,
+				sisa_anggaran = pagu_revisi - (realisasi_periode_lalu + realisasi_periode_ini),
+				persentase_realisasi = CASE 
+					WHEN pagu_revisi > 0 THEN ((realisasi_periode_lalu + realisasi_periode_ini) / pagu_revisi) * 100 
+					ELSE 0 END
+			WHERE id = $1
+		`, currNode)
+		if err != nil {
+			slog.Error("Recalculate fields failed", "error", err)
+			return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to recalculate node"})
+		}
+
+		var parentID pgtype.UUID
+		err = tx.QueryRow(reqCtx, `SELECT parent_id FROM anggaran_node WHERE id = $1`, currNode).Scan(&parentID)
+		if err != nil || !parentID.Valid {
+			break
+		}
+
+		_, err = tx.Exec(reqCtx, `
+			UPDATE anggaran_node p
+			SET pagu_revisi = (SELECT COALESCE(SUM(pagu_revisi), 0) FROM anggaran_node WHERE parent_id = p.id),
+				realisasi_periode_lalu = (SELECT COALESCE(SUM(realisasi_periode_lalu), 0) FROM anggaran_node WHERE parent_id = p.id),
+				realisasi_periode_ini = (SELECT COALESCE(SUM(realisasi_periode_ini), 0) FROM anggaran_node WHERE parent_id = p.id)
+			WHERE p.id = $1
+		`, parentID)
+		if err != nil {
+			slog.Error("Rollup parent failed", "error", err)
+			return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to rollup parent node"})
+		}
+
+		currNode = parentID
+	}
+
+	if err := tx.Commit(reqCtx); err != nil {
+		slog.Error("Commit tx failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to update data"})
+	}
+
+	return ctx.JSON(http.StatusOK, map[string]string{"message": "Anggaran updated successfully"})
+}
+
 func (h *Handler) UploadBuktiAnggaran(ctx echo.Context) error {
 	file, err := ctx.FormFile("file")
 	if err != nil {

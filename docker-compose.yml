@@ -13,7 +13,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - ./postgres_data:/var/lib/postgresql/data
     deploy:
       resources:
         limits:
@@ -75,6 +75,5 @@ services:
       - VITE_API_URL=http://backend:8080
 
 volumes:
-  db_data:
   kas_storage:
   backend_storage:
