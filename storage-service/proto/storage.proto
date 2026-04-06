@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package storage;
+option go_package = "github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/storage-service/proto;storage";
+
+service StorageService {
+  rpc UploadStream(stream UploadRequest) returns (UploadResponse) {}
+  rpc DownloadStream(DownloadRequest) returns (stream DownloadResponse) {}
+}
+
+message UploadRequest {
+  oneof request {
+    bytes chunk_data = 1;
+    string filename_hint = 2;
+  }
+}
+
+message UploadResponse {
+  string hash = 1;
+  string mime_type = 2;
+  int64 size = 3;
+}
+
+message DownloadRequest {
+  string hash = 1;
+}
+
+message DownloadResponse {
+  bytes chunk_data = 1;
+}

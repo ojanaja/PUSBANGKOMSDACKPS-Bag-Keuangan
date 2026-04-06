@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  storage-service:
+    build: .
+    ports:
+      - "50051:50051"
+    volumes:
+      - storage-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  storage-data:

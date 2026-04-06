@@ -1,32 +1,23 @@
 package services
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"fmt"
+	"context"
 	"io"
-	"log/slog"
-	"net/http"
-	"os"
-	"os/exec"
-	"path/filepath"
-)
 
-var (
-	casCreateTemp = os.CreateTemp
-	casReadFile   = os.ReadFile
-	casStat       = os.Stat
-	casRename     = os.Rename
-	casWriteFile  = func(f *os.File, blob []byte) (int, error) { return f.Write(blob) }
+	pb "github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/storage-service/proto"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type CASStorage struct {
-	BasePath string
+	client pb.StorageServiceClient
 }
 
-func NewCASStorage(basePath string) *CASStorage {
-	_ = os.MkdirAll(basePath, 0755)
-	return &CASStorage{BasePath: basePath}
+func NewCASStorage(conn grpc.ClientConnInterface) *CASStorage {
+	return &CASStorage{
+		client: pb.NewStorageServiceClient(conn),
+	}
 }
 
 type SaveResult struct {
@@ -35,150 +26,92 @@ type SaveResult struct {
 	Size     int64
 }
 
-func compressPDF(inputPath string) (string, error) {
-	outputPath := inputPath + ".compressed"
-	cmd := exec.Command("gs",
-		"-sDEVICE=pdfwrite",
-		"-dCompatibilityLevel=1.4",
-		"-dPDFSETTINGS=/ebook",
-		"-dNOPAUSE",
-		"-dQUIET",
-		"-dBATCH",
-		"-sOutputFile="+outputPath,
-		inputPath,
-	)
-
-	if err := cmd.Run(); err != nil {
-		return "", err
-	}
-
-	return outputPath, nil
-}
-
-func (c *CASStorage) Save(r io.Reader) (*SaveResult, error) {
-	tmp, err := casCreateTemp(c.BasePath, "cas-upload-*")
+func (c *CASStorage) Save(r io.Reader, filenameHint string) (*SaveResult, error) {
+	stream, err := c.client.UploadStream(context.Background())
 	if err != nil {
-		return nil, fmt.Errorf("failed to create temp file: %w", err)
+		return nil, err
 	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
 
-	if _, err = io.Copy(tmp, r); err != nil {
-		return nil, fmt.Errorf("failed to write temp file: %w", err)
+	if filenameHint != "" {
+		if sendErr := stream.Send(&pb.UploadRequest{
+			Request: &pb.UploadRequest_FilenameHint{FilenameHint: filenameHint},
+		}); sendErr != nil {
+			return nil, sendErr
+		}
 	}
-	_ = tmp.Close()
 
-	f, err := os.Open(tmpPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open temp file for sniffing: %w", err)
-	}
-	header := make([]byte, 512)
-	n, _ := io.ReadFull(f, header)
-	_ = f.Close()
-	mimeType := http.DetectContentType(header[:n])
-
-	finalPath := tmpPath
-
-	if mimeType == "application/pdf" {
-		compressedPath, err := compressPDF(tmpPath)
-		if err == nil {
-			defer os.Remove(compressedPath)
-			infoComp, errComp := os.Stat(compressedPath)
-			infoOrig, errOrig := os.Stat(tmpPath)
-			if errComp == nil && errOrig == nil && infoComp.Size() > 0 && infoComp.Size() < infoOrig.Size() {
-				finalPath = compressedPath
+	buf := make([]byte, 64*1024) // 64KB
+	for {
+		n, err := r.Read(buf)
+		if n > 0 {
+			if sendErr := stream.Send(&pb.UploadRequest{
+				Request: &pb.UploadRequest_ChunkData{ChunkData: buf[:n]},
+			}); sendErr != nil {
+				return nil, sendErr
 			}
-		} else {
-			slog.Warn("PDF compression failed; using original", "error", err)
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 
-	blob, err := casReadFile(finalPath)
+	resp, err := stream.CloseAndRecv()
 	if err != nil {
-		return nil, fmt.Errorf("failed to read final file: %w", err)
+		return nil, err
 	}
 
-	hashBytes := sha256.Sum256(blob)
-	hashHex := hex.EncodeToString(hashBytes[:])
-	finalSize := int64(len(blob))
+	return &SaveResult{
+		Hash:     resp.Hash,
+		MimeType: resp.MimeType,
+		Size:     resp.Size,
+	}, nil
+}
 
-	destPath := filepath.Join(c.BasePath, hashHex)
-	if _, err := casStat(destPath); err == nil {
-		return &SaveResult{Hash: hashHex, MimeType: mimeType, Size: finalSize}, nil
-	}
-
-	putTmp, err := casCreateTemp(c.BasePath, "cas-put-"+hashHex+"-*")
+// Download streams the file from gRPC to the writer.
+// If the file exists, it will call onFound() before writing any data.
+func (c *CASStorage) Download(hash string, w io.Writer, onFound func()) error {
+	stream, err := c.client.DownloadStream(context.Background(), &pb.DownloadRequest{Hash: hash})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create temp put file: %w", err)
+		return err
 	}
-	putTmpPath := putTmp.Name()
-	defer os.Remove(putTmpPath)
 
-	if _, err := casWriteFile(putTmp, blob); err != nil {
-		return nil, fmt.Errorf("failed to copy to temp put file: %w", err)
-	}
-	_ = putTmp.Close()
-	_ = os.Chmod(putTmpPath, 0644)
-
-	if err := casRename(putTmpPath, destPath); err != nil {
-		if _, statErr := casStat(destPath); statErr == nil {
-			return &SaveResult{Hash: hashHex, MimeType: mimeType, Size: finalSize}, nil
+	// Try reading the first chunk to ensure it doesn't return NotFound
+	resp, err := stream.Recv()
+	if err != nil {
+		if err == io.EOF {
+			// Found, but empty
+			onFound()
+			return nil
 		}
-		return nil, fmt.Errorf("failed to publish cas blob: %w", err)
+		return err
 	}
 
-	return &SaveResult{Hash: hashHex, MimeType: mimeType, Size: finalSize}, nil
+	onFound()
+	if _, err := w.Write(resp.ChunkData); err != nil {
+		return err
+	}
+
+	for {
+		resp, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		if _, err := w.Write(resp.ChunkData); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-/* ORIGINAL CODE PRESERVED FOR REFERENCE
-func (c *CASStorage) Save(r io.Reader) (*SaveResult, error) {
-	tmp, err := os.CreateTemp(c.BasePath, "cas-upload-*")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create temp file: %w", err)
+func (c *CASStorage) IsNotFoundError(err error) bool {
+	if st, ok := status.FromError(err); ok {
+		return st.Code() == codes.NotFound
 	}
-	defer os.Remove(tmp.Name())
-
-	hasher := sha256.New()
-	tee := io.TeeReader(r, hasher)
-
-	size, err := io.Copy(tmp, tee)
-	if err != nil {
-		tmp.Close()
-		return nil, fmt.Errorf("failed to write temp file: %w", err)
-	}
-	tmp.Close()
-
-	hashBytes := hasher.Sum(nil)
-	hashHex := hex.EncodeToString(hashBytes)
-
-	f, _ := os.Open(tmp.Name())
-	buf := make([]byte, 512)
-	n, _ := f.Read(buf)
-	f.Close()
-	mimeType := http.DetectContentType(buf[:n])
-
-	destPath := filepath.Join(c.BasePath, hashHex)
-	if _, err := os.Stat(destPath); err == nil {
-		return &SaveResult{Hash: hashHex, MimeType: mimeType, Size: size}, nil
-	}
-
-	if err := os.Rename(tmp.Name(), destPath); err != nil {
-		src, _ := os.Open(tmp.Name())
-		dst, _ := os.Create(destPath)
-		io.Copy(dst, src)
-		src.Close()
-		dst.Close()
-	}
-
-	return &SaveResult{Hash: hashHex, MimeType: mimeType, Size: size}, nil
-}
-*/
-
-func (c *CASStorage) GetPath(hash string) string {
-	return filepath.Join(c.BasePath, hash)
-}
-
-func (c *CASStorage) Exists(hash string) bool {
-	_, err := os.Stat(c.GetPath(hash))
-	return err == nil
+	return false
 }
