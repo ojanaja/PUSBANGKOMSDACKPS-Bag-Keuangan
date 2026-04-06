@@ -35,27 +35,42 @@ services:
   # 2. Go Backend API
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile.new
     container_name: keuangan-backend
     environment:
       - DB_URL=postgres://keuangan_admin:NasBpkDbPass2025!@db:5432/keuangan_pusbangkom?sslmode=disable
       - JWT_SECRET=keuangan-pusbangkom-jwt-secret-2026
-      - CAS_PATH=/app/storage/cas
+      - STORAGE_SERVICE_ADDR=storage-service:50051
       - COOKIE_SECURE=false
     ports:
       - "8080:8080"
     volumes:
       - backend_storage:/app/storage
-      - kas_storage:/mnt/nas_data # Simulating NAS storage bind mount
     depends_on:
       db:
+        condition: service_started
+      storage-service:
         condition: service_started
     deploy:
       resources:
         limits:
           cpus: "1.5"
           memory: "1G"
+
+  # 5. NAS Storage Microservice
+  storage-service:
+    build:
+      context: ./storage-service
+      dockerfile: Dockerfile
+    container_name: keuangan-storage-service
+    environment:
+      - STORAGE_BASE_PATH=/app/data
+    volumes:
+      - kas_storage:/app/data
+    ports:
+      - "50051:50051"
+    restart: unless-stopped
 
   # 4. Frontend Dev Server
   frontend-dev:

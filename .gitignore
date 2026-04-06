@@ -24,12 +24,23 @@ Thumbs.db
 # Docker / Deployment
 *.tar.gz
 nginx/certs/
+postgres_data/
 san.cnf
 full_migration.sql
 migrasi.sql
+
+# Storage
+backend/storage/
+storage/
 
 # Logs
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Temporary / Disabled
+*.new
+*.disabled
+*.bak
+*.tmp
