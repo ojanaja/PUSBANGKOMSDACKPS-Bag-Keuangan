@@ -6,7 +6,7 @@ import { FISCAL_YEAR_OPTIONS } from '@/shared/config/constants'
 interface ImportModalProps {
     onClose: () => void
     onImported: (tahun: number) => void
-    importMutation: UseMutationResult<{ programs_upserted?: number; akun_upserted?: number }, Error, { file: File; tahun: number }>
+    importMutation: UseMutationResult<{ programs_upserted?: number; akun_upserted?: number }, Error, { file: File; tahun_anggaran: number }>
 }
 
 export default function ImportModal({ onClose, onImported, importMutation }: ImportModalProps) {
@@ -22,7 +22,7 @@ export default function ImportModal({ onClose, onImported, importMutation }: Imp
         setImportError(null)
         setImportResult(null)
         try {
-            const data = await importMutation.mutateAsync({ file: importFile, tahun: importTahun })
+            const data = await importMutation.mutateAsync({ file: importFile, tahun_anggaran: importTahun })
             setImportResult(data)
             setImportFile(null)
             onImported(importTahun)

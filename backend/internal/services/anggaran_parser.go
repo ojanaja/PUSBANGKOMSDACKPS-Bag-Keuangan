@@ -85,6 +85,19 @@ func ParseAnggaranCSVStream(r io.Reader, handle func(AnggaranNodeImport) error) 
 	return count, nil
 }
 
+// ParseAnggaranCSVBatch parses FA Detail CSV and returns all nodes as a slice (non-streaming).
+func ParseAnggaranCSVBatch(r io.Reader) ([]AnggaranNodeImport, error) {
+	var result []AnggaranNodeImport
+	_, err := ParseAnggaranCSVStream(r, func(node AnggaranNodeImport) error {
+		result = append(result, node)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 func parseRow(record []string) (AnggaranNodeImport, bool) {
 	node := AnggaranNodeImport{}
 	isRelevant := false

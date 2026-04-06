@@ -1,9 +1,11 @@
-import { useState, useRef } from 'react'
-import { Upload, ChevronRight, X, RefreshCw, AlertCircle, CheckCircle2, Loader2, Plus, FolderKanban, FileText, Database, Eye, ExternalLink, Edit2 } from 'lucide-react'
+import { useState } from 'react'
+import { Upload, ChevronRight, X, RefreshCw, AlertCircle, Loader2, FolderKanban, FileText, Database, Eye, ExternalLink, Edit2 } from 'lucide-react'
 import { useAnggaran, useAnggaranDokumen, type TreeNode } from '@/features/anggaran/application/useAnggaran'
-import FileDropzone from '@/features/progres/components/FileDropzone'
+import FileDropzone from '@/components/common/FileDropzone'
 import EditPaguModal from '@/features/anggaran/components/EditPaguModal'
+import ImportPreviewModal from '@/features/anggaran/components/ImportPreviewModal'
 import { apiUrl } from '@/shared/api/httpClient'
+import { useAuthStore } from '@/stores/authStore'
 import { formatCurrency } from '@/lib/formatCurrency'
 import { FISCAL_YEAR_OPTIONS } from '@/shared/config/constants'
 
@@ -43,6 +45,9 @@ function Breadcrumbs({ path, onNavigate }: { path: TreeNode[], onNavigate: (inde
 function FolderRow({ node, onClick, onUpload, onEdit }: { node: TreeNode; onClick: () => void; onUpload: (node: TreeNode) => void; onEdit: (node: TreeNode) => void }) {
     const hasChildren = node.children && node.children.length > 0
     const persentase = node.pagu_revisi > 0 ? (node.realisasi_sd_periode / node.pagu_revisi) * 100 : 0
+    const currentUser = useAuthStore(s => s.user)
+    const canEditPagu = currentUser?.Permissions?.includes('anggaran:update')
+    const canReadDokumen = currentUser?.Permissions?.includes('dokumen:read')
     
     return (
         <tr 
@@ -78,22 +83,26 @@ function FolderRow({ node, onClick, onUpload, onEdit }: { node: TreeNode; onClic
             <td className="px-6 py-5 text-center border-b border-slate-100 align-top">
                 {!hasChildren && (
                     <div className="flex flex-col items-center gap-2">
-                        <button 
-                            onClick={(e) => { e.stopPropagation(); onEdit(node); }}
-                            className="inline-flex w-full items-center justify-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors border border-slate-200" 
-                            title="Edit Pagu & Realisasi"
-                        >
-                            <Edit2 size={16} />
-                            <span>Edit Data</span>
-                        </button>
-                        <button 
-                            onClick={(e) => { e.stopPropagation(); onUpload(node); }}
-                            className="inline-flex w-full items-center justify-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors border border-slate-200" 
-                            title="Unggah dokumen bukti"
-                        >
-                            <Upload size={16} />
-                            <span>Dokumen</span>
-                        </button>
+                        {canEditPagu && (
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); onEdit(node); }}
+                                className="inline-flex w-full items-center justify-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors border border-slate-200" 
+                                title="Edit Pagu & Realisasi"
+                            >
+                                <Edit2 size={16} />
+                                <span>Edit Data</span>
+                            </button>
+                        )}
+                        {canReadDokumen && (
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); onUpload(node); }}
+                                className="inline-flex w-full items-center justify-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors border border-slate-200" 
+                                title="Unggah dokumen bukti"
+                            >
+                                <Upload size={16} />
+                                <span>Dokumen</span>
+                            </button>
+                        )}
                     </div>
                 )}
             </td>
@@ -102,117 +111,28 @@ function FolderRow({ node, onClick, onUpload, onEdit }: { node: TreeNode; onClic
 }
 
 export default function AnggaranPage() {
+    const currentUser = useAuthStore(s => s.user)
+    const canCreate = currentUser?.Permissions?.includes('anggaran:create')
+    
     const [showImportModal, setShowImportModal] = useState(false)
-    const [isDragging, setIsDragging] = useState(false)
     const [tahun, setTahun] = useState(new Date().getFullYear())
     const [bulan, setBulan] = useState(new Date().getMonth() + 1)
     const [currentPathIds, setCurrentPathIds] = useState<string[]>([])
     const [uploadTarget, setUploadTarget] = useState<TreeNode | null>(null)
     const [editTarget, setEditTarget] = useState<TreeNode | null>(null)
 
-    const { query, importMutation, manualMutation, updatePaguMutation, uploadBuktiMutation } = useAnggaran(tahun, bulan)
+    const { query, previewMutation, confirmImportMutation, updatePaguMutation, uploadBuktiMutation, copyDataMutation } = useAnggaran(tahun, bulan)
     const { data: uploadDocuments = [], refetch: refetchDocuments, isLoading: loadingDocs } = useAnggaranDokumen(uploadTarget?.id || null)
 
     const tree = query.data || []
     const loading = query.isLoading
     const error = query.error instanceof Error ? query.error.message : null
 
-    const [importFile, setImportFile] = useState<File | null>(null)
-    const [importTahun, setImportTahun] = useState(new Date().getFullYear())
-    const [importResult, setImportResult] = useState<{ programs_upserted?: number; akun_upserted?: number } | null>(null)
-    const [importError, setImportError] = useState<string | null>(null)
-    const fileInputRef = useRef<HTMLInputElement>(null)
-
-    const [showManualModal, setShowManualModal] = useState(false)
-    const [manualTahun, setManualTahun] = useState(new Date().getFullYear())
-    const [manualData, setManualData] = useState({
-        program_kode: '', program_uraian: '',
-        kegiatan_kode: '', kegiatan_uraian: '',
-        output_kode: '', output_uraian: '',
-        suboutput_kode: '', suboutput_uraian: '',
-        akun_kode: '', akun_uraian: '',
-        pagu: '', realisasi: '', sisa: ''
-    })
-    const [manualError, setManualError] = useState<string | null>(null)
-
     const totalPagu = tree.reduce((sum, p) => sum + p.pagu_revisi, 0)
     const totalRealisasi = tree.reduce((sum, p) => sum + p.realisasi_sd_periode, 0)
     const totalSisa = tree.reduce((sum, p) => sum + p.sisa_anggaran, 0)
 
-    const handleImport = async () => {
-        if (!importFile) return
 
-        setImportError(null)
-        setImportResult(null)
-
-        try {
-            const data = await importMutation.mutateAsync({ file: importFile, tahun: importTahun })
-            setImportResult(data)
-            setImportFile(null)
-            setTahun(importTahun)
-        } catch (e) {
-            setImportError(e instanceof Error ? e.message : 'Terjadi kesalahan')
-        }
-    }
-
-    const handleFileDrop = (e: React.DragEvent) => {
-        e.preventDefault()
-        setIsDragging(false)
-        const files = e.dataTransfer.files
-        if (files.length > 0) {
-            setImportFile(files[0])
-            setImportResult(null)
-            setImportError(null)
-        }
-    }
-
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = e.target.files
-        if (files && files.length > 0) {
-            setImportFile(files[0])
-            setImportResult(null)
-            setImportError(null)
-        }
-    }
-
-    const handleManualSubmit = async (e: React.FormEvent) => {
-        e.preventDefault()
-        setManualError(null)
-
-        try {
-            const payload = {
-                tahun_anggaran: manualTahun,
-                program_kode: manualData.program_kode,
-                program_uraian: manualData.program_uraian,
-                kegiatan_kode: manualData.kegiatan_kode,
-                kegiatan_uraian: manualData.kegiatan_uraian,
-                output_kode: manualData.output_kode,
-                output_uraian: manualData.output_uraian,
-                suboutput_kode: manualData.suboutput_kode,
-                suboutput_uraian: manualData.suboutput_uraian,
-                akun_kode: manualData.akun_kode,
-                akun_uraian: manualData.akun_uraian,
-                pagu: Number(manualData.pagu) || 0,
-                realisasi: Number(manualData.realisasi) || 0,
-                sisa: Number(manualData.sisa) || 0,
-            }
-
-            await manualMutation.mutateAsync(payload)
-
-            setShowManualModal(false)
-            setManualData({
-                program_kode: '', program_uraian: '',
-                kegiatan_kode: '', kegiatan_uraian: '',
-                output_kode: '', output_uraian: '',
-                suboutput_kode: '', suboutput_uraian: '',
-                akun_kode: '', akun_uraian: '',
-                pagu: '', realisasi: '', sisa: ''
-            })
-            setTahun(manualTahun)
-        } catch (e) {
-            setManualError(e instanceof Error ? e.message : 'Terjadi kesalahan')
-        }
-    }
 
     const currentPath: TreeNode[] = []
     let currLevelNodes = tree
@@ -264,20 +184,16 @@ export default function AnggaranPage() {
                         <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
                         Perbarui Data
                     </button>
-                    <button
-                        onClick={() => { setShowManualModal(true); setManualError(null) }}
-                        className="inline-flex items-center gap-2 px-5 py-3 bg-slate-100 text-slate-700 rounded-lg text-base font-medium hover:bg-slate-200 transition-colors shadow-sm"
-                    >
-                        <Plus size={16} />
-                        Tambah Manual
-                    </button>
-                    <button
-                        onClick={() => { setShowImportModal(true); setImportResult(null); setImportError(null); setImportFile(null) }}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors shadow-sm"
-                    >
-                        <Upload size={16} />
-                        Unggah Excel/CSV
-                    </button>
+
+                    {canCreate && (
+                        <button
+                            onClick={() => setShowImportModal(true)}
+                            className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors shadow-sm"
+                        >
+                            <Upload size={16} />
+                            Unggah Excel/CSV
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -335,8 +251,24 @@ export default function AnggaranPage() {
                     ) : tree.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-20 text-center">
                             <Upload size={40} className="text-slate-300 mb-3" />
-                            <p className="text-base text-slate-600 font-medium">Belum ada data anggaran untuk tahun {tahun}</p>
+                            <p className="text-base text-slate-600 font-medium">Belum ada data anggaran untuk bulan ini</p>
                             <p className="text-sm text-slate-500 mt-1">Klik tombol "Unggah Excel/CSV" di atas untuk memasukkan data</p>
+
+                            {bulan > 1 && canCreate && (
+                                <button 
+                                    onClick={() => {
+                                        if (confirm(`Salin data dari bulan sebelumnya? Anda dapat mulai melakukan penyesuaian setelah data disalin.`)) {
+                                            copyDataMutation.mutate({ tahun, fromBulan: bulan - 1, toBulan: bulan }, {
+                                                onError: (e) => alert(e instanceof Error ? e.message : 'Gagal menyalin data')
+                                            })
+                                        }
+                                    }}
+                                    disabled={copyDataMutation.isPending}
+                                    className="mt-6 px-4 py-2 bg-white border border-primary-300 text-primary-600 rounded-lg text-sm font-medium hover:bg-primary-50 transition-colors shadow-sm disabled:opacity-50"
+                                >
+                                    {copyDataMutation.isPending ? 'Menyalin data...' : `Atau Salin Data dari Bulan ${bulan - 1}`}
+                                </button>
+                            )}
                         </div>
                     ) : (
                         <table className="w-full text-sm">
@@ -385,235 +317,14 @@ export default function AnggaranPage() {
                 </div>
             </div>
 
-            {
-                showImportModal && (
-                    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowImportModal(false)}>
-                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-between mb-6">
-                                <h3 className="text-xl font-bold text-slate-900">Unggah Excel / CSV Laporan Anggaran</h3>
-                                <button onClick={() => setShowImportModal(false)} className="p-2 rounded-lg hover:bg-slate-100">
-                                    <X size={20} className="text-slate-400" />
-                                </button>
-                            </div>
-
-                            <div className="mb-4">
-                                <label className="block text-base font-medium text-slate-700 mb-1.5">Tahun Anggaran</label>
-                                <select
-                                    value={importTahun}
-                                    onChange={(e) => setImportTahun(Number(e.target.value))}
-                                    className="w-full border border-slate-200 rounded-lg px-3 py-3 text-base"
-                                >
-                                    {FISCAL_YEAR_OPTIONS.map(y => (
-                                        <option key={y} value={y}>{y}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div
-                                onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
-                                onDragLeave={() => setIsDragging(false)}
-                                onDrop={handleFileDrop}
-                                onClick={() => fileInputRef.current?.click()}
-                                className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer ${isDragging ? 'border-primary-400 bg-primary-50' : importFile ? 'border-emerald-400 bg-emerald-50' : 'border-slate-300 hover:border-primary-400'
-                                    }`}
-                            >
-                                <input
-                                    ref={fileInputRef}
-                                    type="file"
-                                    accept=".csv,.xlsx"
-                                    onChange={handleFileSelect}
-                                    className="hidden"
-                                />
-                                {importFile ? (
-                                    <>
-                                        <CheckCircle2 size={32} className="mx-auto text-emerald-500 mb-2" />
-                                        <p className="text-sm font-medium text-emerald-700">{importFile.name}</p>
-                                        <p className="text-xs text-emerald-500 mt-1">{(importFile.size / 1024).toFixed(1)} KB — Klik untuk mengganti</p>
-                                    </>
-                                ) : (
-                                    <>
-                                        <Upload size={32} className="mx-auto text-slate-300 mb-2" />
-                                        <p className="text-base text-slate-600 font-medium">Seret file ke kotak ini</p>
-                                        <p className="text-sm text-slate-500 mt-1">atau klik untuk memilih file dari komputer Anda</p>
-                                    </>
-                                )}
-                            </div>
-
-                            {importError && (
-                                <div className="mt-4 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                                    <AlertCircle size={16} className="text-red-500 shrink-0" />
-                                    <p className="text-sm text-red-700">{importError}</p>
-                                </div>
-                            )}
-
-                            {importResult && (
-                                <div className="mt-4 flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
-                                    <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
-                                    <p className="text-sm text-emerald-700">
-                                        Import berhasil! {importResult.programs_upserted} program, {importResult.akun_upserted} akun diproses.
-                                    </p>
-                                </div>
-                            )}
-
-                            <div className="flex items-center justify-end gap-3 mt-6">
-                                <button
-                                    onClick={() => setShowImportModal(false)}
-                                    className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                                >
-                                    Batal
-                                </button>
-                                <button
-                                    onClick={handleImport}
-                                    disabled={!importFile || importMutation.isPending}
-                                    className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                >
-                                    {importMutation.isPending ? (
-                                        <>
-                                            <Loader2 size={16} className="animate-spin" />
-                                            Mengimport...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Upload size={18} />
-                                            Mulai Proses Data
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-
-                            <p className="text-xs text-slate-400 mt-4">
-                                Format: CSV dengan kolom ProgramKode, ProgramUraian, KegiatanKode, KegiatanUraian,
-                                OutputKode, OutputUraian, SubOutputKode, SubOutputUraian, AkunKode, AkunUraian, Pagu, Realisasi, Sisa
-                            </p>
-                        </div>
-                    </div>
-                )
-            }
-
-            {
-                showManualModal && (
-                    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowManualModal(false)}>
-                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-between mb-6 sticky top-0 bg-white pb-2 border-b border-slate-100">
-                                <h3 className="text-xl font-bold text-slate-900">Tambah Data Anggaran Secara Manual</h3>
-                                <button onClick={() => setShowManualModal(false)} className="p-2 rounded-lg hover:bg-slate-100">
-                                    <X size={20} className="text-slate-400" />
-                                </button>
-                            </div>
-
-                            <form onSubmit={handleManualSubmit}>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                                    <div className="md:col-span-2">
-                                        <label className="block text-base font-medium text-slate-700 mb-1.5">Tahun Anggaran</label>
-                                        <select
-                                            value={manualTahun}
-                                            onChange={(e) => setManualTahun(Number(e.target.value))}
-                                            className="w-full lg:w-1/2 border border-slate-200 rounded-lg px-3 py-3 text-base"
-                                            required
-                                        >
-                                            {FISCAL_YEAR_OPTIONS.map(y => (
-                                                <option key={y} value={y}>{y}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-base font-medium text-slate-700 mb-1.5">Kode Program</label>
-                                        <input type="text" value={manualData.program_kode} onChange={e => setManualData({ ...manualData, program_kode: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="Contoh: 033.01.WA" required />
-                                    </div>
-                                    <div>
-                                        <label className="block text-base font-medium text-slate-700 mb-1.5">Uraian Program</label>
-                                        <input type="text" value={manualData.program_uraian} onChange={e => setManualData({ ...manualData, program_uraian: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="Program Utama..." required />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-base font-medium text-slate-700 mb-1.5">Kode Kegiatan</label>
-                                        <input type="text" value={manualData.kegiatan_kode} onChange={e => setManualData({ ...manualData, kegiatan_kode: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="Contoh: 4054" required />
-                                    </div>
-                                    <div>
-                                        <label className="block text-base font-medium text-slate-700 mb-1.5">Uraian Kegiatan</label>
-                                        <input type="text" value={manualData.kegiatan_uraian} onChange={e => setManualData({ ...manualData, kegiatan_uraian: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="Kegiatan..." required />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-base font-medium text-slate-700 mb-1.5">Kode Output</label>
-                                        <input type="text" value={manualData.output_kode} onChange={e => setManualData({ ...manualData, output_kode: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="Contoh: 4054.EBA" required />
-                                    </div>
-                                    <div>
-                                        <label className="block text-base font-medium text-slate-700 mb-1.5">Uraian Output</label>
-                                        <input type="text" value={manualData.output_uraian} onChange={e => setManualData({ ...manualData, output_uraian: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="Output..." required />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-base font-medium text-slate-700 mb-1.5">Kode SubOutput</label>
-                                        <input type="text" value={manualData.suboutput_kode} onChange={e => setManualData({ ...manualData, suboutput_kode: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="Contoh: 4054.EBA.994" required />
-                                    </div>
-                                    <div>
-                                        <label className="block text-base font-medium text-slate-700 mb-1.5">Uraian SubOutput</label>
-                                        <input type="text" value={manualData.suboutput_uraian} onChange={e => setManualData({ ...manualData, suboutput_uraian: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="SubOutput..." required />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-base font-medium text-slate-700 mb-1.5">Kode Akun</label>
-                                        <input type="text" value={manualData.akun_kode} onChange={e => setManualData({ ...manualData, akun_kode: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="Contoh: 533111" required />
-                                    </div>
-                                    <div>
-                                        <label className="block text-base font-medium text-slate-700 mb-1.5">Uraian Akun</label>
-                                        <input type="text" value={manualData.akun_uraian} onChange={e => setManualData({ ...manualData, akun_uraian: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="Belanja Modal..." required />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1.5">Pagu Anggaran (Rp)</label>
-                                        <input type="number" value={manualData.pagu} onChange={e => setManualData({ ...manualData, pagu: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="0" required />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1.5">Realisasi Keluar (Rp)</label>
-                                        <input type="number" value={manualData.realisasi} onChange={e => setManualData({ ...manualData, realisasi: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="0" required />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1.5">Sisa Anggaran (Rp)</label>
-                                        <input type="number" value={manualData.sisa} onChange={e => setManualData({ ...manualData, sisa: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="0" required />
-                                    </div>
-                                </div>
-
-                                {manualError && (
-                                    <div className="mb-4 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                                        <AlertCircle size={16} className="text-red-500 shrink-0" />
-                                        <p className="text-sm text-red-700">{manualError}</p>
-                                    </div>
-                                )}
-
-                                <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-slate-100">
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowManualModal(false)}
-                                        className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                                    >
-                                        Batal
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        disabled={manualMutation.isPending}
-                                        className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                    >
-                                        {manualMutation.isPending ? (
-                                            <>
-                                                <Loader2 size={16} className="animate-spin" />
-                                                Menyimpan...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <CheckCircle2 size={16} />
-                                                Simpan Anggaran
-                                            </>
-                                        )}
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                )
-            }
+            {showImportModal && (
+                <ImportPreviewModal
+                    onClose={() => setShowImportModal(false)}
+                    onImported={(t) => { setTahun(t); setShowImportModal(false) }}
+                    previewMutation={previewMutation}
+                    confirmImportMutation={confirmImportMutation}
+                />
+            )}
 
             {
                 uploadTarget && (
@@ -623,7 +334,7 @@ export default function AnggaranPage() {
                                 <div>
                                     <h3 className="text-xl font-bold text-slate-900">Arsip Digital</h3>
                                     <p className="text-base text-slate-600 mt-1 truncate max-w-[300px]" title={uploadTarget.uraian}>
-                                        Unggah Dokumen Bukti untuk {uploadTarget.kode}
+                                        Manajemen Dokumen Bukti untuk {uploadTarget.kode}
                                     </p>
                                 </div>
                                 <button onClick={() => setUploadTarget(null)} className="p-1 rounded-lg hover:bg-slate-100 shrink-0">
@@ -631,23 +342,25 @@ export default function AnggaranPage() {
                                 </button>
                             </div>
 
-                            <FileDropzone 
-                                label="Unggah Dokumen Bukti" 
-                                type="document" 
-                                empty 
-                                uploading={uploadBuktiMutation.isPending ? { progress: '' } : undefined}
-                                onDrop={async (files) => {
-                                    if (files.length > 0) {
-                                        try {
-                                            await uploadBuktiMutation.mutateAsync({ id: uploadTarget.id, file: files[0] })
-                                            alert('Dokumen berhasil diunggah')
-                                            refetchDocuments()
-                                        } catch (e) {
-                                            alert('Gagal mengunggah dokumen')
+                            {currentUser?.Permissions?.includes('dokumen:create') && (
+                                <FileDropzone 
+                                    label="Unggah Dokumen Bukti" 
+                                    type="document" 
+                                    empty 
+                                    uploading={uploadBuktiMutation.isPending ? { progress: '' } : undefined}
+                                    onDrop={async (files: File[]) => {
+                                        if (files.length > 0) {
+                                            try {
+                                                await uploadBuktiMutation.mutateAsync({ id: uploadTarget.id, file: files[0] })
+                                                alert('Dokumen berhasil diunggah')
+                                                refetchDocuments()
+                                            } catch (e) {
+                                                alert('Gagal mengunggah dokumen')
+                                            }
                                         }
-                                    }
-                                }} 
-                            />
+                                    }} 
+                                />
+                            )}
 
                             <div className="mt-6 space-y-3">
                                 {loadingDocs ? (

@@ -56,7 +56,7 @@ describe('useAnggaran', () => {
         })
 
         await act(async () => {
-            await result.current.importMutation.mutateAsync({ file, tahun: 2025 })
+            await result.current.importMutation.mutateAsync({ file, tahun_anggaran: 2025 })
         })
 
         expect(apiPost).toHaveBeenCalledTimes(1)
@@ -64,25 +64,9 @@ describe('useAnggaran', () => {
 
         const formDataArg = vi.mocked(apiPost).mock.calls[0][1] as FormData
         expect(formDataArg.get('file')).toBe(file)
-        expect(formDataArg.get('tahun')).toBe('2025')
+        expect(formDataArg.get('tahun_anggaran')).toBe('2025')
 
         expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['anggaran'] })
     })
 
-    it('posts manual payload and invalidates anggaran queries on success', async () => {
-        vi.mocked(apiGet).mockResolvedValueOnce([])
-        vi.mocked(apiPost).mockResolvedValueOnce({ ok: true })
-        const { queryClient, wrapper } = createWrapperAndClient()
-        const invalidateQueriesSpy = vi.spyOn(queryClient, 'invalidateQueries')
-
-        const { result } = renderHook(() => useAnggaran(2025), { wrapper })
-        const payload = { akun: '521111', pagu: 100000 }
-
-        await act(async () => {
-            await result.current.manualMutation.mutateAsync(payload)
-        })
-
-        expect(apiPost).toHaveBeenCalledWith('/anggaran/manual', payload)
-        expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['anggaran'] })
-    })
 })

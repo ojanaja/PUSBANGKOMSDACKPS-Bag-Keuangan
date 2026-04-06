@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"mime/multipart"
@@ -113,8 +114,207 @@ func (h *Handler) ImportAnggaranData(ctx echo.Context) error {
 	})
 }
 
-func (h *Handler) CreateManualAnggaran(ctx echo.Context) error {
-    return ctx.JSON(http.StatusNotImplemented, map[string]string{"message": "Not implemented anymore for custom tree"})
+
+// PreviewAnggaranImport parses an Excel file and returns the tree preview without saving to DB.
+func (h *Handler) PreviewAnggaranImport(ctx echo.Context) error {
+	file, err := ctx.FormFile("file")
+	if err != nil {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "file is required"})
+	}
+
+	src, err := openMultipartFile(file)
+	if err != nil {
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to open file"})
+	}
+	defer src.Close()
+
+	nodes, format, err := services.DetectAndParseExcel(src)
+	if err != nil {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": fmt.Sprintf("Parse error: %s", err)})
+	}
+
+	if len(nodes) == 0 {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "No data could be parsed from the file"})
+	}
+
+	// Build preview response with temp IDs
+	type PreviewNode struct {
+		TempID       string `json:"temp_id"`
+		ParentTempID string `json:"parent_temp_id"`
+		Level        int    `json:"level"`
+		Jenis        string `json:"jenis"`
+		Kode         string `json:"kode"`
+		Uraian       string `json:"uraian"`
+		PaguRevisi   string `json:"pagu_revisi"`
+		LockPagu     string `json:"lock_pagu"`
+		RealisasiLalu string `json:"realisasi_lalu"`
+		RealisasiIni  string `json:"realisasi_ini"`
+		RealisasiSD   string `json:"realisasi_sd"`
+		Persentase    string `json:"persentase"`
+		Sisa          string `json:"sisa"`
+	}
+
+	previewNodes := make([]PreviewNode, 0, len(nodes))
+	// Track temp_id for each level to build parent references
+	var levelTempIDs [10]string
+
+	jenisCounts := make(map[string]int)
+
+	for i, node := range nodes {
+		tempID := fmt.Sprintf("temp-%d", i)
+
+		parentTempID := ""
+		if node.ParentLevel >= 0 {
+			parentTempID = levelTempIDs[node.ParentLevel]
+		}
+
+		previewNodes = append(previewNodes, PreviewNode{
+			TempID:        tempID,
+			ParentTempID:  parentTempID,
+			Level:         node.Level,
+			Jenis:         node.Jenis,
+			Kode:          node.Kode,
+			Uraian:        node.Uraian,
+			PaguRevisi:    node.PaguRevisi,
+			LockPagu:      node.LockPagu,
+			RealisasiLalu: node.RealisasiLalu,
+			RealisasiIni:  node.RealisasiIni,
+			RealisasiSD:   node.RealisasiSD,
+			Persentase:    node.Persentase,
+			Sisa:          node.Sisa,
+		})
+
+		levelTempIDs[node.Level] = tempID
+		for j := node.Level + 1; j < 10; j++ {
+			levelTempIDs[j] = ""
+		}
+
+		jenisCounts[node.Jenis]++
+	}
+
+	return ctx.JSON(http.StatusOK, map[string]interface{}{
+		"format_detected": string(format),
+		"nodes":           previewNodes,
+		"stats": map[string]interface{}{
+			"total_nodes": len(previewNodes),
+			"by_jenis":    jenisCounts,
+		},
+	})
+}
+
+// ConfirmAnggaranImport accepts a JSON tree (from preview) and saves it to the database.
+func (h *Handler) ConfirmAnggaranImport(ctx echo.Context) error {
+	type ConfirmNode struct {
+		TempID        string `json:"temp_id"`
+		ParentTempID  string `json:"parent_temp_id"`
+		Level         int    `json:"level"`
+		Jenis         string `json:"jenis"`
+		Kode          string `json:"kode"`
+		Uraian        string `json:"uraian"`
+		PaguRevisi    string `json:"pagu_revisi"`
+		LockPagu      string `json:"lock_pagu"`
+		RealisasiLalu string `json:"realisasi_lalu"`
+		RealisasiIni  string `json:"realisasi_ini"`
+		RealisasiSD   string `json:"realisasi_sd"`
+		Persentase    string `json:"persentase"`
+		Sisa          string `json:"sisa"`
+	}
+
+	type ConfirmPayload struct {
+		TahunAnggaran int           `json:"tahun_anggaran"`
+		Bulan         int           `json:"bulan"`
+		Nodes         []ConfirmNode `json:"nodes"`
+	}
+
+	var payload ConfirmPayload
+	if err := json.NewDecoder(ctx.Request().Body).Decode(&payload); err != nil {
+		slog.Error("ConfirmAnggaranImport 400", "reason", "invalid JSON body", "error", err)
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "invalid JSON body"})
+	}
+
+	if payload.TahunAnggaran == 0 {
+		slog.Error("ConfirmAnggaranImport 400", "reason", "tahun_anggaran is 0")
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "tahun_anggaran is required"})
+	}
+
+	if payload.Bulan == 0 {
+		slog.Error("ConfirmAnggaranImport 400", "reason", "bulan is 0", "received", payload.Bulan)
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "bulan is required"})
+	}
+
+	if len(payload.Nodes) == 0 {
+		slog.Error("ConfirmAnggaranImport 400", "reason", "no nodes provided")
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "no nodes provided"})
+	}
+
+	reqCtx := ctx.Request().Context()
+	tx, err := h.pool.Begin(reqCtx)
+	if err != nil {
+		slog.Error("Begin tx failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to import data"})
+	}
+	defer func() {
+		_ = tx.Rollback(reqCtx)
+	}()
+
+	// Map temp_id → real UUID
+	tempToReal := make(map[string]pgtype.UUID)
+	nodeCount := 0
+
+	for _, node := range payload.Nodes {
+		parentID := pgtype.UUID{Valid: false}
+		if node.ParentTempID != "" {
+			if realParent, ok := tempToReal[node.ParentTempID]; ok {
+				parentID = realParent
+			}
+		}
+
+		var insertedID pgtype.UUID
+		err := tx.QueryRow(reqCtx, `
+			INSERT INTO anggaran_node (
+				id, parent_id, jenis, kode, uraian, tahun_anggaran, bulan,
+				pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini,
+				realisasi_sd_periode, persentase_realisasi, sisa_anggaran
+			) VALUES (
+				gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+			)
+			ON CONFLICT (COALESCE(parent_id, '00000000-0000-0000-0000-000000000000'::uuid), kode, bulan) DO UPDATE SET
+				uraian = EXCLUDED.uraian,
+				pagu_revisi = EXCLUDED.pagu_revisi,
+				lock_pagu = EXCLUDED.lock_pagu,
+				realisasi_periode_lalu = EXCLUDED.realisasi_periode_lalu,
+				realisasi_periode_ini = EXCLUDED.realisasi_periode_ini,
+				realisasi_sd_periode = EXCLUDED.realisasi_sd_periode,
+				persentase_realisasi = EXCLUDED.persentase_realisasi,
+				sisa_anggaran = EXCLUDED.sisa_anggaran
+			RETURNING id;
+		`,
+			parentID, node.Jenis, node.Kode, node.Uraian, payload.TahunAnggaran, payload.Bulan,
+			mustDecimalNumeric(node.PaguRevisi), mustDecimalNumeric(node.LockPagu),
+			mustDecimalNumeric(node.RealisasiLalu), mustDecimalNumeric(node.RealisasiIni),
+			mustDecimalNumeric(node.RealisasiSD), mustDecimalNumeric(node.Persentase),
+			mustDecimalNumeric(node.Sisa),
+		).Scan(&insertedID)
+
+		if err != nil {
+			slog.Error("upsert node failed", "error", err, "kode", node.Kode)
+			return ctx.JSON(http.StatusInternalServerError, map[string]string{
+				"message": fmt.Sprintf("Failed to save node %s: %s", node.Kode, err),
+			})
+		}
+
+		tempToReal[node.TempID] = insertedID
+		nodeCount++
+	}
+
+	if err := tx.Commit(reqCtx); err != nil {
+		slog.Error("Commit tx failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to import data"})
+	}
+
+	return ctx.JSON(http.StatusOK, map[string]interface{}{
+		"nodes_upserted": nodeCount,
+	})
 }
 
 func mustDecimalNumeric(s string) pgtype.Numeric {
@@ -126,7 +326,10 @@ func mustDecimalNumeric(s string) pgtype.Numeric {
 }
 
 func (h *Handler) GetAnggaranTree(ctx echo.Context, params GetAnggaranTreeParams) error {
-	rows, err := h.queries.GetAnggaranTree(ctx.Request().Context(), pgtype.Int4{Int32: int32(params.Tahun), Valid: true})
+	rows, err := h.queries.GetAnggaranTree(ctx.Request().Context(), db.GetAnggaranTreeParams{
+		TahunAnggaran: pgtype.Int4{Int32: int32(params.Tahun), Valid: true},
+		Bulan:         int32(params.Bulan),
+	})
 	if err != nil {
 		slog.Error("GetAnggaranTree failed", "error", err)
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to retrieve Anggaran tree"})
@@ -258,7 +461,7 @@ func (h *Handler) UploadBuktiAnggaran(ctx echo.Context) error {
 	}
 	defer src.Close()
 
-	result, err := h.cas.Save(src)
+	result, err := h.cas.Save(src, file.Filename)
 	if err != nil {
 		slog.Error("CAS save failed", "error", err)
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to save file"})
@@ -287,8 +490,6 @@ func (h *Handler) UploadBuktiAnggaran(ctx echo.Context) error {
 		slog.Error("InsertAnggaranDokumen failed", "error", err)
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to save metadata"})
 	}
-
-	h.activity.Log(ctx.Request().Context(), userID, "UPLOAD_BUKTI_ANGGARAN", "anggaran_dokumen", ptr(uuid.UUID(docID.Bytes)), map[string]interface{}{"filename": file.Filename, "node_id": nodeIDStr}, ctx.RealIP(), ctx.Request().UserAgent())
 
 	return ctx.JSON(http.StatusOK, map[string]string{"message": "Document uploaded successfully"})
 }

@@ -70,18 +70,18 @@ func (q *Queries) GetAnggaranDokumenByNode(ctx context.Context, anggaranNodeID p
 const getAnggaranTree = `-- name: GetAnggaranTree :many
 WITH RECURSIVE tree AS (
     SELECT 
-        id, parent_id, jenis, kode, uraian, tahun_anggaran,
+        id, parent_id, jenis, kode, uraian, tahun_anggaran, bulan,
         pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini,
         realisasi_sd_periode, persentase_realisasi, sisa_anggaran,
         1 AS level,
         ARRAY[kode]::text[] AS path
     FROM anggaran_node a
-    WHERE a.parent_id IS NULL AND a.tahun_anggaran = $1
+    WHERE a.parent_id IS NULL AND a.tahun_anggaran = $1 AND a.bulan = $2
 
     UNION ALL
 
     SELECT 
-        n.id, n.parent_id, n.jenis, n.kode, n.uraian, n.tahun_anggaran,
+        n.id, n.parent_id, n.jenis, n.kode, n.uraian, n.tahun_anggaran, n.bulan,
         n.pagu_revisi, n.lock_pagu, n.realisasi_periode_lalu, n.realisasi_periode_ini,
         n.realisasi_sd_periode, n.persentase_realisasi, n.sisa_anggaran,
         t.level + 1,
@@ -89,9 +89,14 @@ WITH RECURSIVE tree AS (
     FROM anggaran_node n
     JOIN tree t ON n.parent_id = t.id
 )
-SELECT id, parent_id, jenis, kode, uraian, tahun_anggaran, pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini, realisasi_sd_periode, persentase_realisasi, sisa_anggaran, level, path FROM tree
+SELECT id, parent_id, jenis, kode, uraian, tahun_anggaran, bulan, pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini, realisasi_sd_periode, persentase_realisasi, sisa_anggaran, level, path FROM tree
 ORDER BY path
 `
+
+type GetAnggaranTreeParams struct {
+	TahunAnggaran pgtype.Int4 `json:"tahun_anggaran"`
+	Bulan         int32       `json:"bulan"`
+}
 
 type GetAnggaranTreeRow struct {
 	ID                   pgtype.UUID    `json:"id"`
@@ -100,6 +105,7 @@ type GetAnggaranTreeRow struct {
 	Kode                 string         `json:"kode"`
 	Uraian               string         `json:"uraian"`
 	TahunAnggaran        pgtype.Int4    `json:"tahun_anggaran"`
+	Bulan                int32          `json:"bulan"`
 	PaguRevisi           pgtype.Numeric `json:"pagu_revisi"`
 	LockPagu             pgtype.Numeric `json:"lock_pagu"`
 	RealisasiPeriodeLalu pgtype.Numeric `json:"realisasi_periode_lalu"`
@@ -111,8 +117,8 @@ type GetAnggaranTreeRow struct {
 	Path                 []string       `json:"path"`
 }
 
-func (q *Queries) GetAnggaranTree(ctx context.Context, tahunAnggaran pgtype.Int4) ([]GetAnggaranTreeRow, error) {
-	rows, err := q.db.Query(ctx, getAnggaranTree, tahunAnggaran)
+func (q *Queries) GetAnggaranTree(ctx context.Context, arg GetAnggaranTreeParams) ([]GetAnggaranTreeRow, error) {
+	rows, err := q.db.Query(ctx, getAnggaranTree, arg.TahunAnggaran, arg.Bulan)
 	if err != nil {
 		return nil, err
 	}
@@ -127,6 +133,7 @@ func (q *Queries) GetAnggaranTree(ctx context.Context, tahunAnggaran pgtype.Int4
 			&i.Kode,
 			&i.Uraian,
 			&i.TahunAnggaran,
+			&i.Bulan,
 			&i.PaguRevisi,
 			&i.LockPagu,
 			&i.RealisasiPeriodeLalu,
@@ -269,11 +276,11 @@ func (q *Queries) InsertRealisasiSP2D(ctx context.Context, arg InsertRealisasiSP
 
 const upsertAnggaranNode = `-- name: UpsertAnggaranNode :one
 INSERT INTO anggaran_node (
-    id, parent_id, jenis, kode, uraian, tahun_anggaran, 
+    id, parent_id, jenis, kode, uraian, tahun_anggaran, bulan,
     pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini, 
     realisasi_sd_periode, persentase_realisasi, sisa_anggaran
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
 )
 ON CONFLICT (id) DO UPDATE SET
     uraian = EXCLUDED.uraian,
@@ -284,7 +291,7 @@ ON CONFLICT (id) DO UPDATE SET
     realisasi_sd_periode = EXCLUDED.realisasi_sd_periode,
     persentase_realisasi = EXCLUDED.persentase_realisasi,
     sisa_anggaran = EXCLUDED.sisa_anggaran
-RETURNING id, parent_id, jenis, kode, uraian, tahun_anggaran, pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini, realisasi_sd_periode, persentase_realisasi, sisa_anggaran
+RETURNING id, parent_id, jenis, kode, uraian, tahun_anggaran, pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini, realisasi_sd_periode, persentase_realisasi, sisa_anggaran, bulan
 `
 
 type UpsertAnggaranNodeParams struct {
@@ -294,6 +301,7 @@ type UpsertAnggaranNodeParams struct {
 	Kode                 string         `json:"kode"`
 	Uraian               string         `json:"uraian"`
 	TahunAnggaran        pgtype.Int4    `json:"tahun_anggaran"`
+	Bulan                int32          `json:"bulan"`
 	PaguRevisi           pgtype.Numeric `json:"pagu_revisi"`
 	LockPagu             pgtype.Numeric `json:"lock_pagu"`
 	RealisasiPeriodeLalu pgtype.Numeric `json:"realisasi_periode_lalu"`
@@ -311,6 +319,7 @@ func (q *Queries) UpsertAnggaranNode(ctx context.Context, arg UpsertAnggaranNode
 		arg.Kode,
 		arg.Uraian,
 		arg.TahunAnggaran,
+		arg.Bulan,
 		arg.PaguRevisi,
 		arg.LockPagu,
 		arg.RealisasiPeriodeLalu,
@@ -334,6 +343,7 @@ func (q *Queries) UpsertAnggaranNode(ctx context.Context, arg UpsertAnggaranNode
 		&i.RealisasiSdPeriode,
 		&i.PersentaseRealisasi,
 		&i.SisaAnggaran,
+		&i.Bulan,
 	)
 	return i, err
 }

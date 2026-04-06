@@ -81,6 +81,31 @@ export function buildTree(rows: APIAnggaranNode[]): TreeNode[] {
     return roots
 }
 
+export interface PreviewNode {
+    temp_id: string
+    parent_temp_id: string
+    level: number
+    jenis: string
+    kode: string
+    uraian: string
+    pagu_revisi: string
+    lock_pagu: string
+    realisasi_lalu: string
+    realisasi_ini: string
+    realisasi_sd: string
+    persentase: string
+    sisa: string
+}
+
+export interface PreviewResult {
+    format_detected: 'fa_detail' | 'emon' | 'unknown'
+    nodes: PreviewNode[]
+    stats: {
+        total_nodes: number
+        by_jenis: Record<string, number>
+    }
+}
+
 export function useAnggaran(tahun: number, bulan?: number) {
     const queryClient = useQueryClient()
 
@@ -95,10 +120,10 @@ export function useAnggaran(tahun: number, bulan?: number) {
     })
 
     const importMutation = useMutation({
-        mutationFn: async ({ file, tahun }: { file: File, tahun: number }) => {
+        mutationFn: async ({ file, tahun_anggaran }: { file: File, tahun_anggaran: number }) => {
             const formData = new FormData()
             formData.append('file', file)
-            formData.append('tahun', tahun.toString())
+            formData.append('tahun_anggaran', tahun_anggaran.toString())
 
             return apiPost<{ programs_upserted?: number; akun_upserted?: number }>('/anggaran/import', formData)
         },
@@ -107,14 +132,61 @@ export function useAnggaran(tahun: number, bulan?: number) {
         }
     })
 
-    const manualMutation = useMutation({
-        mutationFn: async (data: Record<string, unknown>) => {
-            return apiPost('/anggaran/manual', data)
+    const previewMutation = useMutation({
+        mutationFn: async ({ file }: { file: File }) => {
+            const formData = new FormData()
+            formData.append('file', file)
+            return apiPost<PreviewResult>('/anggaran/preview', formData)
+        }
+    })
+
+    const confirmImportMutation = useMutation({
+        mutationFn: async ({ tahun_anggaran, bulan, nodes }: { tahun_anggaran: number, bulan: number, nodes: PreviewNode[] }) => {
+            return apiPost<{ nodes_upserted: number }>('/anggaran/confirm-import', {
+                tahun_anggaran,
+                bulan,
+                nodes
+            })
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['anggaran'] })
         }
     })
+
+    const copyDataMutation = useMutation({
+        mutationFn: async ({ tahun, fromBulan, toBulan }: { tahun: number, fromBulan: number, toBulan: number }) => {
+            const data = await apiGet<APIAnggaranNode[]>(`/anggaran/tree?tahun=${tahun}&bulan=${fromBulan}`)
+            if (!data || data.length === 0) {
+                throw new Error('Data bulan sebelumnya kosong.')
+            }
+
+            const nodes: PreviewNode[] = data.map(n => ({
+                temp_id: n.id,
+                parent_temp_id: n.parent_id || '',
+                level: n.level,
+                jenis: n.jenis,
+                kode: n.kode,
+                uraian: n.uraian,
+                pagu_revisi: String(n.pagu_revisi || 0),
+                lock_pagu: String(n.lock_pagu || 0),
+                realisasi_lalu: String(n.realisasi_periode_lalu || 0),
+                realisasi_ini: String(n.realisasi_periode_ini || 0),
+                realisasi_sd: String(n.realisasi_sd_periode || 0),
+                persentase: String(n.persentase_realisasi || 0),
+                sisa: String(n.sisa_anggaran || 0)
+            }))
+
+            return apiPost<{ nodes_upserted: number }>('/anggaran/confirm-import', {
+                tahun_anggaran: tahun,
+                bulan: toBulan,
+                nodes
+            })
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['anggaran'] })
+        }
+    })
+
 
     const updatePaguMutation = useMutation({
         mutationFn: async ({ id, data }: { id: string, data: Record<string, string> }) => {
@@ -140,7 +212,9 @@ export function useAnggaran(tahun: number, bulan?: number) {
     return {
         query,
         importMutation,
-        manualMutation,
+        previewMutation,
+        confirmImportMutation,
+        copyDataMutation,
         updatePaguMutation,
         uploadBuktiMutation
     }

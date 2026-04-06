@@ -1,10 +1,10 @@
 -- name: UpsertAnggaranNode :one
 INSERT INTO anggaran_node (
-    id, parent_id, jenis, kode, uraian, tahun_anggaran, 
+    id, parent_id, jenis, kode, uraian, tahun_anggaran, bulan,
     pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini, 
     realisasi_sd_periode, persentase_realisasi, sisa_anggaran
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
 )
 ON CONFLICT (id) DO UPDATE SET
     uraian = EXCLUDED.uraian,
@@ -20,18 +20,18 @@ RETURNING *;
 -- name: GetAnggaranTree :many
 WITH RECURSIVE tree AS (
     SELECT 
-        id, parent_id, jenis, kode, uraian, tahun_anggaran,
+        id, parent_id, jenis, kode, uraian, tahun_anggaran, bulan,
         pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini,
         realisasi_sd_periode, persentase_realisasi, sisa_anggaran,
         1 AS level,
         ARRAY[kode]::text[] AS path
     FROM anggaran_node a
-    WHERE a.parent_id IS NULL AND a.tahun_anggaran = $1
+    WHERE a.parent_id IS NULL AND a.tahun_anggaran = $1 AND a.bulan = $2
 
     UNION ALL
 
     SELECT 
-        n.id, n.parent_id, n.jenis, n.kode, n.uraian, n.tahun_anggaran,
+        n.id, n.parent_id, n.jenis, n.kode, n.uraian, n.tahun_anggaran, n.bulan,
         n.pagu_revisi, n.lock_pagu, n.realisasi_periode_lalu, n.realisasi_periode_ini,
         n.realisasi_sd_periode, n.persentase_realisasi, n.sisa_anggaran,
         t.level + 1,
