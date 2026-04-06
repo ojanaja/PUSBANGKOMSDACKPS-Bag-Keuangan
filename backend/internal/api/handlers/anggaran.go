@@ -511,6 +511,8 @@ func (h *Handler) GetAnggaranDokumenByNode(ctx echo.Context, id types.UUID) erro
 			"mime_type":        r.MimeType,
 			"file_size_bytes":  r.FileSizeBytes,
 			"created_at":       r.CreatedAt.Time,
+			"uploaded_by":      uuid.UUID(r.UploadedBy.Bytes).String(),
+			"uploaded_by_name": r.UploadedByName,
 		}
 	}
 

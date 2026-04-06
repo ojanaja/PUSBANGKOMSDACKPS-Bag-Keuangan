@@ -58,9 +58,14 @@ VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING *;
 
 -- name: GetAnggaranDokumenByNode :many
-SELECT * FROM anggaran_dokumen_bukti
-WHERE anggaran_node_id = $1
-ORDER BY created_at DESC;
+SELECT 
+    d.id, d.anggaran_node_id, d.file_hash_sha256, d.original_name, 
+    d.mime_type, d.file_size_bytes, d.uploaded_by, d.created_at, 
+    COALESCE(NULLIF(u.full_name, ''), u.username, 'User Non-Aktif') as uploaded_by_name 
+FROM anggaran_dokumen_bukti d
+LEFT JOIN users u ON d.uploaded_by = u.id
+WHERE d.anggaran_node_id = $1
+ORDER BY d.created_at DESC;
 
 -- name: GetAnggaranDokumenByID :one
 SELECT * FROM anggaran_dokumen_bukti

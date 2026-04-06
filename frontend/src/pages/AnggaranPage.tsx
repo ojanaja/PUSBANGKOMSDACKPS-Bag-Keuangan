@@ -8,6 +8,7 @@ import { apiUrl } from '@/shared/api/httpClient'
 import { useAuthStore } from '@/stores/authStore'
 import { formatCurrency } from '@/lib/formatCurrency'
 import { FISCAL_YEAR_OPTIONS } from '@/shared/config/constants'
+import { useToast } from '@/shared/hooks/useToast'
 
 const MONTH_OPTIONS = [
     { value: 1, label: 'Januari' }, { value: 2, label: 'Februari' }, { value: 3, label: 'Maret' },
@@ -113,6 +114,7 @@ function FolderRow({ node, onClick, onUpload, onEdit }: { node: TreeNode; onClic
 export default function AnggaranPage() {
     const currentUser = useAuthStore(s => s.user)
     const canCreate = currentUser?.Permissions?.includes('anggaran:create')
+    const { showToast } = useToast()
     
     const [showImportModal, setShowImportModal] = useState(false)
     const [tahun, setTahun] = useState(new Date().getFullYear())
@@ -329,7 +331,7 @@ export default function AnggaranPage() {
             {
                 uploadTarget && (
                     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setUploadTarget(null)}>
-                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
+                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl p-6" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-between mb-6">
                                 <div>
                                     <h3 className="text-xl font-bold text-slate-900">Arsip Digital</h3>
@@ -352,10 +354,10 @@ export default function AnggaranPage() {
                                         if (files.length > 0) {
                                             try {
                                                 await uploadBuktiMutation.mutateAsync({ id: uploadTarget.id, file: files[0] })
-                                                alert('Dokumen berhasil diunggah')
+                                                showToast('Dokumen berhasil diunggah', 'success')
                                                 refetchDocuments()
                                             } catch (e) {
-                                                alert('Gagal mengunggah dokumen')
+                                                showToast('Gagal mengunggah dokumen', 'error')
                                             }
                                         }
                                     }} 
@@ -380,12 +382,15 @@ export default function AnggaranPage() {
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-sm font-semibold text-slate-800 truncate" title={doc.original_name}>{doc.original_name}</p>
-                                                    <div className="flex items-center gap-2 mt-0.5">
-                                                        <span className="text-[10px] text-slate-500 font-medium bg-slate-100 px-1.5 py-0.5 rounded uppercase tracking-wide">
+                                                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                                        <span className="text-[10px] text-slate-500 font-medium bg-slate-100 px-1.5 py-0.5 rounded uppercase tracking-wide shrink-0">
                                                             {(doc.file_size_bytes / 1024).toFixed(1)} KB
                                                         </span>
-                                                        <span className="text-xs text-slate-400">
+                                                        <span className="text-xs text-slate-400 shrink-0">
                                                             {new Date(doc.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                        </span>
+                                                        <span className="text-xs text-slate-400 flex items-center gap-1 shrink-0">
+                                                            &bull; Diunggah oleh: <span className="font-medium text-slate-600">{doc.uploaded_by_name || 'Tidak diketahui'}</span>
                                                         </span>
                                                     </div>
                                                 </div>

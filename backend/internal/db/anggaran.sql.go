@@ -33,20 +33,37 @@ func (q *Queries) GetAnggaranDokumenByID(ctx context.Context, id pgtype.UUID) (A
 }
 
 const getAnggaranDokumenByNode = `-- name: GetAnggaranDokumenByNode :many
-SELECT id, anggaran_node_id, file_hash_sha256, original_name, mime_type, file_size_bytes, uploaded_by, created_at FROM anggaran_dokumen_bukti
-WHERE anggaran_node_id = $1
-ORDER BY created_at DESC
+SELECT 
+    d.id, d.anggaran_node_id, d.file_hash_sha256, d.original_name, 
+    d.mime_type, d.file_size_bytes, d.uploaded_by, d.created_at, 
+    COALESCE(NULLIF(u.full_name, ''), u.username, 'User Non-Aktif') as uploaded_by_name 
+FROM anggaran_dokumen_bukti d
+LEFT JOIN users u ON d.uploaded_by = u.id
+WHERE d.anggaran_node_id = $1
+ORDER BY d.created_at DESC
 `
 
-func (q *Queries) GetAnggaranDokumenByNode(ctx context.Context, anggaranNodeID pgtype.UUID) ([]AnggaranDokumenBukti, error) {
+type GetAnggaranDokumenByNodeRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	AnggaranNodeID pgtype.UUID        `json:"anggaran_node_id"`
+	FileHashSha256 string             `json:"file_hash_sha256"`
+	OriginalName   string             `json:"original_name"`
+	MimeType       string             `json:"mime_type"`
+	FileSizeBytes  int64              `json:"file_size_bytes"`
+	UploadedBy     pgtype.UUID        `json:"uploaded_by"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UploadedByName string             `json:"uploaded_by_name"`
+}
+
+func (q *Queries) GetAnggaranDokumenByNode(ctx context.Context, anggaranNodeID pgtype.UUID) ([]GetAnggaranDokumenByNodeRow, error) {
 	rows, err := q.db.Query(ctx, getAnggaranDokumenByNode, anggaranNodeID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []AnggaranDokumenBukti
+	var items []GetAnggaranDokumenByNodeRow
 	for rows.Next() {
-		var i AnggaranDokumenBukti
+		var i GetAnggaranDokumenByNodeRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.AnggaranNodeID,
@@ -56,6 +73,7 @@ func (q *Queries) GetAnggaranDokumenByNode(ctx context.Context, anggaranNodeID p
 			&i.FileSizeBytes,
 			&i.UploadedBy,
 			&i.CreatedAt,
+			&i.UploadedByName,
 		); err != nil {
 			return nil, err
 		}

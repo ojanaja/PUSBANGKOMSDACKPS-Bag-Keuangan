@@ -228,6 +228,8 @@ export interface AnggaranDokumenItem {
 	mime_type: string
 	file_size_bytes: number
 	created_at: string
+	uploaded_by: string
+	uploaded_by_name: string
 }
 
 export function useAnggaranDokumen(nodeId: string | null) {

@@ -101,6 +101,11 @@ components:
         created_at:
           type: string
           format: date-time
+        uploaded_by:
+          type: string
+          format: uuid
+        uploaded_by_name:
+          type: string
 
     User:
       type: object
