@@ -3,6 +3,7 @@ package handlers
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -13,7 +14,6 @@ import (
 	"github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/api/middleware"
 	"github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/db"
 	"github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/services"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
@@ -22,16 +22,14 @@ import (
 type AuthHandler struct {
 	authService *services.AuthService
 	queries     *db.Queries
-	activity    *services.ActivityLogger
 	pool        sqlExecutor
 }
 
-func NewAuthHandler(authService *services.AuthService, queries *db.Queries, pool *pgxpool.Pool, activity *services.ActivityLogger) *AuthHandler {
+func NewAuthHandler(authService *services.AuthService, queries *db.Queries, pool *pgxpool.Pool) *AuthHandler {
 	return &AuthHandler{
 		authService: authService,
 		queries:     queries,
 		pool:        pool,
-		activity:    activity,
 	}
 }
 
@@ -41,10 +39,11 @@ type loginRequest struct {
 }
 
 type userResponse struct {
-	ID       string `json:"ID"`
-	Username string `json:"Username"`
-	FullName string `json:"FullName"`
-	Role     string `json:"Role"`
+	ID          string   `json:"ID"`
+	Username    string   `json:"Username"`
+	FullName    string   `json:"FullName"`
+	Role        string   `json:"Role"`
+	Permissions []string `json:"Permissions"`
 }
 
 func (h *AuthHandler) Login(c echo.Context) error {
@@ -66,10 +65,16 @@ func (h *AuthHandler) Login(c echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"message": "Invalid username or password"})
 	}
 
+	var perms []string
+	if len(user.Permissions) > 0 {
+		json.Unmarshal(user.Permissions, &perms)
+	}
+
 	token, _ := h.authService.GenerateToken(
 		fmt.Sprintf("%x-%x-%x-%x-%x", user.ID.Bytes[0:4], user.ID.Bytes[4:6], user.ID.Bytes[6:8], user.ID.Bytes[8:10], user.ID.Bytes[10:16]),
 		user.Username,
 		user.Role,
+		perms,
 	)
 
 	c.SetCookie(&http.Cookie{
@@ -82,16 +87,14 @@ func (h *AuthHandler) Login(c echo.Context) error {
 		SameSite: cookieSameSiteMode(),
 	})
 
-	uID := uuid.UUID(user.ID.Bytes)
-	h.activity.Log(c.Request().Context(), uID, "LOGIN", "USER", &uID, nil, c.RealIP(), c.Request().UserAgent())
-
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"message": "Login successful",
 		"user": userResponse{
-			ID:       pgUUIDToString(user.ID),
-			Username: user.Username,
-			FullName: user.FullName,
-			Role:     user.Role,
+			ID:          pgUUIDToString(user.ID),
+			Username:    user.Username,
+			FullName:    user.FullName,
+			Role:        user.Role,
+			Permissions: perms,
 		},
 	})
 }
@@ -128,15 +131,6 @@ func (h *AuthHandler) Logout(c echo.Context) error {
 		SameSite: cookieSameSiteMode(),
 	})
 
-	claims := middleware.GetClaims(c)
-	if claims != nil {
-		var uID pgtype.UUID
-		if err := uID.Scan(claims.UserID); err == nil {
-			idVal := uuid.UUID(uID.Bytes)
-			h.activity.Log(c.Request().Context(), idVal, "LOGOUT", "USER", &idVal, nil, c.RealIP(), c.Request().UserAgent())
-		}
-	}
-
 	return c.JSON(http.StatusOK, map[string]string{"message": "Logged out successfully"})
 }
 
@@ -156,11 +150,17 @@ func (h *AuthHandler) Me(c echo.Context) error {
 		return c.JSON(http.StatusNotFound, map[string]string{"message": "User not found"})
 	}
 
+	var perms []string
+	if len(user.Permissions) > 0 {
+		json.Unmarshal(user.Permissions, &perms)
+	}
+
 	return c.JSON(http.StatusOK, userResponse{
-		ID:       pgUUIDToString(user.ID),
-		Username: user.Username,
-		FullName: user.FullName,
-		Role:     user.Role,
+		ID:          pgUUIDToString(user.ID),
+		Username:    user.Username,
+		FullName:    user.FullName,
+		Role:        user.Role,
+		Permissions: perms,
 	})
 }
 

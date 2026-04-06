@@ -19,6 +19,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func main() {
@@ -62,20 +64,17 @@ func main() {
 	slog.Info("Successfully connected to database")
 	database := db.New(pool)
 
-	appCtx, appCancel := context.WithCancel(context.Background())
-	defer appCancel()
-
-	retentionDays := int(envInt32("AUDIT_LOG_RETENTION_DAYS", 0))
-	if retentionDays > 0 {
-		cleanupInterval := envDuration("AUDIT_LOG_CLEANUP_INTERVAL", 24*time.Hour)
-		services.StartActivityLogCleanup(appCtx, database, retentionDays, cleanupInterval)
+	storageAddr := os.Getenv("STORAGE_SERVICE_ADDR")
+	if storageAddr == "" {
+		storageAddr = "localhost:50051"
 	}
-
-	casPath := os.Getenv("CAS_PATH")
-	if casPath == "" {
-		casPath = "./storage/cas"
+	conn, err := grpc.Dial(storageAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		slog.Error("Failed to connect to storage service", "error", err)
+		os.Exit(1)
 	}
-	cas := services.NewCASStorage(casPath)
+	defer conn.Close()
+	cas := services.NewCASStorage(conn)
 
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
@@ -83,10 +82,9 @@ func main() {
 		os.Exit(1)
 	}
 	authService := services.NewAuthService(jwtSecret)
-	activityLogger := services.NewActivityLogger(database)
-	authHandler := handlers.NewAuthHandler(authService, database, pool, activityLogger)
+	authHandler := handlers.NewAuthHandler(authService, database, pool)
 
-	serverHandler := handlers.NewHandler(database, pool, cas, authService, activityLogger)
+	serverHandler := handlers.NewHandler(database, pool, cas, authService)
 
 	e := echo.New()
 	e.HideBanner = true
@@ -160,34 +158,19 @@ func main() {
 
 	wrapper := handlers.ServerInterfaceWrapper{Handler: serverHandler}
 	apiGroup.POST("/anggaran/import", wrapper.ImportAnggaranData)
-	apiGroup.POST("/anggaran/manual", wrapper.CreateManualAnggaran)
+	apiGroup.POST("/anggaran/preview", serverHandler.PreviewAnggaranImport)
+	apiGroup.POST("/anggaran/confirm-import", serverHandler.ConfirmAnggaranImport)
 	apiGroup.GET("/anggaran/tree", wrapper.GetAnggaranTree)
 	apiGroup.PUT("/anggaran/:id", wrapper.UpdateAnggaranNode)
 	apiGroup.POST("/anggaran/upload-bukti", wrapper.UploadBuktiAnggaran)
 	apiGroup.GET("/anggaran/:id/documents", wrapper.GetAnggaranDokumenByNode)
-	apiGroup.GET("/audit-logs", wrapper.ListAuditLogs, authmw.RequireRole("SUPER_ADMIN"))
-	apiGroup.GET("/dashboard/chart", wrapper.GetDashboardChart)
-	apiGroup.GET("/dashboard/drilldown", wrapper.GetDashboardDrilldown)
-	apiGroup.GET("/dashboard/ews", wrapper.GetDashboardEWS)
-	apiGroup.GET("/dashboard/notifications", wrapper.GetDashboardNotifications)
-	apiGroup.POST("/documents", wrapper.UploadDocument)
 	apiGroup.GET("/documents/:id", wrapper.DownloadDocument)
 	apiGroup.GET("/healthz", wrapper.GetHealthz)
-	apiGroup.GET("/paket", wrapper.ListPaket)
-	apiGroup.POST("/paket", wrapper.CreatePaket)
-	apiGroup.GET("/paket/export", wrapper.ExportPaketExcel)
-	apiGroup.DELETE("/paket/:id", wrapper.DeletePaket)
-	apiGroup.GET("/paket/:id", wrapper.GetPaket)
-	apiGroup.PUT("/paket/:id", wrapper.UpdatePaket)
-	apiGroup.GET("/paket/:id/documents", wrapper.GetDocumentsByPaket)
-	apiGroup.PUT("/paket/:id/realisasi", wrapper.UpdateRealisasiFisik)
 	apiGroup.GET("/readyz", wrapper.GetReadyz)
-	apiGroup.GET("/users", wrapper.ListUsers, authmw.RequireRole("SUPER_ADMIN"))
-	apiGroup.POST("/users", wrapper.CreateUser, authmw.RequireRole("SUPER_ADMIN"))
-	apiGroup.DELETE("/users/:id", wrapper.DeleteUser, authmw.RequireRole("SUPER_ADMIN"))
-	apiGroup.PUT("/users/:id", wrapper.UpdateUser, authmw.RequireRole("SUPER_ADMIN"))
-	apiGroup.POST("/verification/document/:id", wrapper.VerifyDocument, authmw.RequireRole("SUPER_ADMIN", "ADMIN_KEUANGAN"))
-	apiGroup.POST("/verification/realisasi/:id", wrapper.VerifyRealisasiFisik, authmw.RequireRole("SUPER_ADMIN", "ADMIN_KEUANGAN"))
+	apiGroup.GET("/users", wrapper.ListUsers, authmw.RequirePermission("users:manage"))
+	apiGroup.POST("/users", wrapper.CreateUser, authmw.RequirePermission("users:manage"))
+	apiGroup.DELETE("/users/:id", wrapper.DeleteUser, authmw.RequirePermission("users:manage"))
+	apiGroup.PUT("/users/:id", wrapper.UpdateUser, authmw.RequirePermission("users:manage"))
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -213,7 +196,6 @@ func main() {
 	signal.Notify(quit, os.Interrupt)
 	<-quit
 	slog.Info("Gracefully shutting down server...")
-	appCancel()
 
 	ctxTimeout, cancelTimeout := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelTimeout()

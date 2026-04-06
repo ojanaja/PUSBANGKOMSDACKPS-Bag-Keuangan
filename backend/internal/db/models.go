@@ -45,6 +45,7 @@ type AnggaranNode struct {
 	RealisasiSdPeriode   pgtype.Numeric `json:"realisasi_sd_periode"`
 	PersentaseRealisasi  pgtype.Numeric `json:"persentase_realisasi"`
 	SisaAnggaran         pgtype.Numeric `json:"sisa_anggaran"`
+	Bulan                int32          `json:"bulan"`
 }
 
 type DokumenBukti struct {
@@ -129,4 +130,5 @@ type User struct {
 	Role         string             `json:"role"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	Permissions  []byte             `json:"permissions"`
 }

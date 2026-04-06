@@ -1,9 +1,15 @@
 package handlers
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"testing"
 
+	"github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/db"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
@@ -72,4 +78,65 @@ func TestUUIDConversionHelpers(t *testing.T) {
 	}
 
 	_ = openapi_types.UUID{}
+}
+
+// Mock DB structures for testing
+type handlerFakeDBTX struct {
+	db.DBTX
+	queryRowFn func(context.Context, string, ...any) pgx.Row
+	execFn     func(context.Context, string, ...any) (pgconn.CommandTag, error)
+	queryFn    func(context.Context, string, ...any) (pgx.Rows, error)
+}
+
+func (m *handlerFakeDBTX) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	if m.queryRowFn != nil {
+		return m.queryRowFn(ctx, sql, args...)
+	}
+	return &handlerFakeRow{err: errors.New("QueryRow not implemented")}
+}
+
+func (m *handlerFakeDBTX) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	if m.execFn != nil {
+		return m.execFn(ctx, sql, args...)
+	}
+	return pgconn.CommandTag{}, errors.New("Exec not implemented")
+}
+
+func (m *handlerFakeDBTX) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	if m.queryFn != nil {
+		return m.queryFn(ctx, sql, args...)
+	}
+	return nil, errors.New("Query not implemented")
+}
+
+type handlerFakeRow struct {
+	data []any
+	err  error
+}
+
+func (r *handlerFakeRow) Scan(dest ...any) error {
+	if r.err != nil {
+		return r.err
+	}
+	if len(dest) != len(r.data) {
+		return fmt.Errorf("Scan: expected %d columns, got %d", len(r.data), len(dest))
+	}
+	for i := range dest {
+		switch d := dest[i].(type) {
+		case *string:
+			*d = r.data[i].(string)
+		case *int32:
+			*d = r.data[i].(int32)
+		case *pgtype.UUID:
+			*d = r.data[i].(pgtype.UUID)
+		case *pgtype.Numeric:
+			*d = r.data[i].(pgtype.Numeric)
+		case *pgtype.Text:
+			*d = r.data[i].(pgtype.Text)
+		default:
+			// Fallback or generic assignment if needed
+			return fmt.Errorf("Scan: unsupported type %T", d)
+		}
+	}
+	return nil
 }
