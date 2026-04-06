@@ -20,20 +20,18 @@ type sqlExecutor interface {
 }
 
 type Handler struct {
-	queries  *db.Queries
-	pool     txBeginner
-	cas      *services.CASStorage
-	auth     *services.AuthService
-	activity *services.ActivityLogger
+	queries *db.Queries
+	pool    txBeginner
+	cas     *services.CASStorage
+	auth    *services.AuthService
 }
 
-func NewHandler(queries *db.Queries, pool *pgxpool.Pool, cas *services.CASStorage, auth *services.AuthService, activity *services.ActivityLogger) *Handler {
+func NewHandler(queries *db.Queries, pool *pgxpool.Pool, cas *services.CASStorage, auth *services.AuthService) *Handler {
 	return &Handler{
-		queries:  queries,
-		pool:     pool,
-		cas:      cas,
-		auth:     auth,
-		activity: activity,
+		queries: queries,
+		pool:    pool,
+		cas:     cas,
+		auth:    auth,
 	}
 }
 

@@ -3,15 +3,16 @@ import {
     Database,
     ChevronLeft,
     ChevronRight,
+    Users
 } from 'lucide-react'
-import { useAuthStore, type UserRole } from '@/stores/authStore'
+import { useAuthStore } from '@/stores/authStore'
 import { useSidebarStore } from '@/stores/sidebarStore'
 
 interface NavItem {
     label: string
     path: string
     icon: React.ReactNode
-    roles: UserRole[]
+    permissions?: string[] // if empty/undefined, accessible to all logged-in users
 }
 
 const navItems: NavItem[] = [
@@ -19,7 +20,12 @@ const navItems: NavItem[] = [
         label: 'Pemantauan Anggaran',
         path: '/anggaran',
         icon: <Database size={22} />,
-        roles: ['SUPER_ADMIN', 'ADMIN_KEUANGAN', 'PPK', 'PENGAWAS'],
+    },
+    {
+        label: 'Manajemen Pengguna',
+        path: '/users',
+        icon: <Users size={22} />,
+        permissions: ['users:manage'],
     },
 ]
 
@@ -27,7 +33,9 @@ export default function Sidebar() {
     const user = useAuthStore((s) => s.user)
     const { isCollapsed, toggle } = useSidebarStore()
 
-    const filteredNav = navItems.filter((item) => (user ? item.roles.includes(user.Role) : false))
+    const filteredNav = navItems.filter((item) => 
+        (user ? (!item.permissions || item.permissions.some(p => user.Permissions?.includes(p))) : false)
+    )
 
     return (
         <aside

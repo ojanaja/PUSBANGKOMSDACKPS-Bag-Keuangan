@@ -23,6 +23,7 @@ function mockStores({ role, isCollapsed = false, toggle = vi.fn() }: { role: Rol
             Username: 'tester',
             FullName: 'Tester',
             Role: role,
+            Permissions: role === 'SUPER_ADMIN' ? ['users:manage'] : [],
         },
     }
 
@@ -53,12 +54,8 @@ describe('Sidebar', () => {
             </MemoryRouter>,
         )
 
-        expect(screen.getByText('Beranda')).toBeInTheDocument()
-        expect(screen.getByText('Integrasi Anggaran')).toBeInTheDocument()
-        expect(screen.getByText('Progres Satker')).toBeInTheDocument()
-        expect(screen.getByText('Sistem Peringatan Dini')).toBeInTheDocument()
+        expect(screen.getByText('Pemantauan Anggaran')).toBeInTheDocument()
         expect(screen.getByText('Manajemen Pengguna')).toBeInTheDocument()
-        expect(screen.getByText('Jejak Audit')).toBeInTheDocument()
     })
 
     it('hides SUPER_ADMIN-only menus for PPK', () => {
@@ -70,11 +67,8 @@ describe('Sidebar', () => {
             </MemoryRouter>,
         )
 
-        expect(screen.getByText('Beranda')).toBeInTheDocument()
-        expect(screen.getByText('Progres Satker')).toBeInTheDocument()
-        expect(screen.queryByText('Integrasi Anggaran')).not.toBeInTheDocument()
+        expect(screen.getByText('Pemantauan Anggaran')).toBeInTheDocument()
         expect(screen.queryByText('Manajemen Pengguna')).not.toBeInTheDocument()
-        expect(screen.queryByText('Jejak Audit')).not.toBeInTheDocument()
     })
 
     it('renders collapsed variant and uses title tooltip labels', () => {
@@ -87,8 +81,8 @@ describe('Sidebar', () => {
         )
 
         expect(screen.queryByText('Keuangan Pusbangkom')).not.toBeInTheDocument()
-        expect(screen.getByTitle('Beranda')).toBeInTheDocument()
-        expect(screen.getByTitle('Integrasi Anggaran')).toBeInTheDocument()
+        expect(screen.getByTitle('Pemantauan Anggaran')).toBeInTheDocument()
+        expect(screen.getByTitle('Manajemen Pengguna')).toBeInTheDocument()
     })
 
     it('calls toggle when collapse button is clicked', async () => {
@@ -125,7 +119,7 @@ describe('Sidebar', () => {
             </MemoryRouter>,
         )
 
-        expect(screen.queryByText('Beranda')).not.toBeInTheDocument()
-        expect(screen.queryByText('Progres Satker')).not.toBeInTheDocument()
+        expect(screen.queryByText('Pemantauan Anggaran')).not.toBeInTheDocument()
+        expect(screen.queryByText('Manajemen Pengguna')).not.toBeInTheDocument()
     })
 })

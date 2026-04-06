@@ -11,13 +11,7 @@ import AppLoader from '@/shared/ui/AppLoader'
 
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const AnggaranPage = lazy(() => import('./pages/AnggaranPage'))
-const PaketListPage = lazy(() => import('./pages/PaketListPage'))
-const PaketWizardPage = lazy(() => import('./pages/PaketWizardPage'))
-const ProgresPage = lazy(() => import('./pages/ProgresPage'))
-const KurvaSPage = lazy(() => import('./pages/KurvaSPage'))
 const UsersPage = lazy(() => import('./pages/UsersPage'))
-const EWSPage = lazy(() => import('./pages/EWSPage'))
-const AuditTrailPage = lazy(() => import('./pages/AuditTrailPage'))
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
 
 function PageLoader() {
@@ -63,17 +57,7 @@ const router = createBrowserRouter([
         children: [
           { index: true, element: <Navigate to="/anggaran" replace /> },
           { path: 'anggaran', element: <Suspense fallback={<PageLoader />}><AnggaranPage /></Suspense> },
-          { path: 'progres-satker', element: <Suspense fallback={<PageLoader />}><PaketListPage /></Suspense> },
-          { path: 'progres-satker/tambah', element: <Suspense fallback={<PageLoader />}><PaketWizardPage /></Suspense> },
-          { path: 'progres/:id', element: <Suspense fallback={<PageLoader />}><ProgresPage /></Suspense> },
-          { path: 'kurva-s/:id', element: <Suspense fallback={<PageLoader />}><KurvaSPage /></Suspense> },
-          { path: 'paket', element: <Navigate to="/progres-satker" replace /> },
-          { path: 'paket/tambah', element: <Navigate to="/progres-satker/tambah" replace /> },
-          { path: 'progres', element: <Navigate to="/progres-satker" replace /> },
-          { path: 'kurva-s', element: <Navigate to="/progres-satker" replace /> },
           { path: 'users', element: <Suspense fallback={<PageLoader />}><UsersPage /></Suspense> },
-          { path: 'ews', element: <Suspense fallback={<PageLoader />}><EWSPage /></Suspense> },
-          { path: 'audit-trail', element: <Suspense fallback={<PageLoader />}><AuditTrailPage /></Suspense> },
           { path: '*', element: <Suspense fallback={<PageLoader />}><NotFoundPage /></Suspense> },
         ],
       },
