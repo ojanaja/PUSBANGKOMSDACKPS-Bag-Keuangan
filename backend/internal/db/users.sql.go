@@ -13,11 +13,11 @@ import (
 
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (
-  id, username, password_hash, full_name, role
+  id, username, password_hash, full_name, role, permissions
 ) VALUES (
-  $1, $2, $3, $4, $5
+  $1, $2, $3, $4, $5, $6
 )
-RETURNING id, username, password_hash, full_name, role, created_at, updated_at
+RETURNING id, username, password_hash, full_name, role, created_at, updated_at, permissions
 `
 
 type CreateUserParams struct {
@@ -26,6 +26,7 @@ type CreateUserParams struct {
 	PasswordHash string      `json:"password_hash"`
 	FullName     string      `json:"full_name"`
 	Role         string      `json:"role"`
+	Permissions  []byte      `json:"permissions"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
@@ -35,6 +36,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		arg.PasswordHash,
 		arg.FullName,
 		arg.Role,
+		arg.Permissions,
 	)
 	var i User
 	err := row.Scan(
@@ -45,6 +47,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.Role,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Permissions,
 	)
 	return i, err
 }
@@ -60,7 +63,7 @@ func (q *Queries) DeleteUser(ctx context.Context, id pgtype.UUID) error {
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, username, password_hash, full_name, role, created_at, updated_at FROM users
+SELECT id, username, password_hash, full_name, role, created_at, updated_at, permissions FROM users
 WHERE id = $1 LIMIT 1
 `
 
@@ -75,12 +78,13 @@ func (q *Queries) GetUser(ctx context.Context, id pgtype.UUID) (User, error) {
 		&i.Role,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Permissions,
 	)
 	return i, err
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, username, password_hash, full_name, role, created_at, updated_at FROM users
+SELECT id, username, password_hash, full_name, role, created_at, updated_at, permissions FROM users
 WHERE username = $1 LIMIT 1
 `
 
@@ -95,23 +99,25 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.Role,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Permissions,
 	)
 	return i, err
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, username, full_name, role, created_at, updated_at
+SELECT id, username, full_name, role, permissions, created_at, updated_at
 FROM users
 ORDER BY created_at DESC
 `
 
 type ListUsersRow struct {
-	ID        pgtype.UUID        `json:"id"`
-	Username  string             `json:"username"`
-	FullName  string             `json:"full_name"`
-	Role      string             `json:"role"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	ID          pgtype.UUID        `json:"id"`
+	Username    string             `json:"username"`
+	FullName    string             `json:"full_name"`
+	Role        string             `json:"role"`
+	Permissions []byte             `json:"permissions"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
@@ -128,6 +134,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 			&i.Username,
 			&i.FullName,
 			&i.Role,
+			&i.Permissions,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -146,16 +153,18 @@ UPDATE users
 SET 
   full_name = $2,
   role = $3,
-  password_hash = $4,
+  permissions = $4,
+  password_hash = $5,
   updated_at = NOW()
 WHERE id = $1
-RETURNING id, username, password_hash, full_name, role, created_at, updated_at
+RETURNING id, username, password_hash, full_name, role, created_at, updated_at, permissions
 `
 
 type UpdateUserParams struct {
 	ID           pgtype.UUID `json:"id"`
 	FullName     string      `json:"full_name"`
 	Role         string      `json:"role"`
+	Permissions  []byte      `json:"permissions"`
 	PasswordHash string      `json:"password_hash"`
 }
 
@@ -164,6 +173,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		arg.ID,
 		arg.FullName,
 		arg.Role,
+		arg.Permissions,
 		arg.PasswordHash,
 	)
 	var i User
@@ -175,6 +185,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.Role,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Permissions,
 	)
 	return i, err
 }

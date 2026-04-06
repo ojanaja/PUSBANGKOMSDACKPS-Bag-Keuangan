@@ -8,6 +8,7 @@ interface User {
     Username: string
     FullName: string
     Role: UserRole
+    Permissions?: string[]
 }
 
 interface AuthState {

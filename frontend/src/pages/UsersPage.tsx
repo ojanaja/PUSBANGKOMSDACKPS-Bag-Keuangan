@@ -5,29 +5,19 @@ import {
     Search,
     Edit2,
     Trash2,
-    Shield,
     ShieldAlert,
-    ShieldCheck,
-    UserCheck,
     Loader2,
     X,
     AlertCircle,
     CheckCircle2
 } from 'lucide-react'
-import { useAuthStore, type UserRole } from '@/stores/authStore'
+import { useAuthStore } from '@/stores/authStore'
 import PageHeader from '@/shared/ui/PageHeader'
 import AppTextButton from '@/shared/ui/AppTextButton'
 import AppLoader from '@/shared/ui/AppLoader'
 import ConfirmDialog from '@/shared/ui/ConfirmDialog'
 import { useToast } from '@/shared/hooks/useToast'
 import { useUsers, type UserItem } from '@/features/users/application/useUsers'
-
-const roleConfig: Record<UserRole, { label: string, icon: React.ComponentType<{ size?: number }>, color: string, bg: string }> = {
-    SUPER_ADMIN: { label: 'Super Admin', icon: ShieldAlert, color: 'text-purple-700', bg: 'bg-purple-100' },
-    ADMIN_KEUANGAN: { label: 'Admin Keuangan', icon: ShieldCheck, color: 'text-blue-700', bg: 'bg-blue-100' },
-    PPK: { label: 'PPK', icon: UserCheck, color: 'text-emerald-700', bg: 'bg-emerald-100' },
-    PENGAWAS: { label: 'Pengawas', icon: Shield, color: 'text-slate-700', bg: 'bg-slate-100' },
-}
 
 export default function UsersPage() {
     const currentUser = useAuthStore(s => s.user)
@@ -43,11 +33,16 @@ export default function UsersPage() {
     const users = query.data || []
     const loading = query.isLoading
 
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<{
+        username: string,
+        full_name: string,
+        password: string,
+        Permissions: string[]
+    }>({
         username: '',
         full_name: '',
         password: '',
-        role: 'PENGAWAS' as UserRole
+        Permissions: []
     })
 
     const handleOpenModal = (user: UserItem | null = null) => {
@@ -58,7 +53,7 @@ export default function UsersPage() {
                 username: user.Username,
                 full_name: user.FullName,
                 password: '',
-                role: user.Role
+                Permissions: user.Permissions || []
             })
         } else {
             setEditingUser(null)
@@ -66,7 +61,7 @@ export default function UsersPage() {
                 username: '',
                 full_name: '',
                 password: '',
-                role: 'PENGAWAS'
+                Permissions: []
             })
         }
         setIsModalOpen(true)
@@ -162,27 +157,16 @@ export default function UsersPage() {
                             <thead>
                                 <tr>
                                     <th className="px-6 py-4">Nama Lengkap / Username</th>
-                                    <th className="px-6 py-4">Role</th>
                                     <th className="px-6 py-4">Tanggal Dibuat</th>
                                     <th className="px-6 py-4 text-center">Aksi</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                                {filteredUsers.map((user, idx) => {
-                                    const roleKey = user.Role as UserRole
-                                    const cfg = roleConfig[roleKey] || roleConfig['PENGAWAS']
-                                    const Icon = cfg.icon
-                                    return (
+                                {filteredUsers.map((user, idx) => (
                                         <tr key={user.ID || idx} className="hover:bg-slate-50/50 transition-colors">
                                             <td className="px-6 py-4">
                                                 <div className="font-semibold text-slate-800">{user.FullName}</div>
                                                 <div className="text-xs text-slate-400 mt-0.5 font-mono">@{user.Username}</div>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${cfg.bg} ${cfg.color}`}>
-                                                    <Icon size={12} />
-                                                    {cfg.label}
-                                                </div>
                                             </td>
                                             <td className="px-6 py-4 text-slate-500">
                                                 {new Date(user.CreatedAt).toLocaleDateString('id-ID', {
@@ -213,8 +197,7 @@ export default function UsersPage() {
                                                 </div>
                                             </td>
                                         </tr>
-                                    )
-                                })}
+                                ))}
                             </tbody>
                         </table>
                     )}
@@ -281,18 +264,115 @@ export default function UsersPage() {
                             />
                         </div>
 
+
+
                         <div className="space-y-1.5">
-                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Role / Peran</label>
-                            <select
-                                className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 appearance-none bg-white"
-                                value={formData.role}
-                                onChange={e => setFormData({ ...formData, role: e.target.value as UserRole })}
-                            >
-                                <option value="SUPER_ADMIN">Super Admin</option>
-                                <option value="ADMIN_KEUANGAN">Admin Keuangan</option>
-                                <option value="PPK">PPK (Pejabat Pembuat Komitmen)</option>
-                                <option value="PENGAWAS">Pengawas / Pemeriksa</option>
-                            </select>
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Hak Akses Fitur (Fitur Anggaran)</label>
+                            <div className="space-y-3">
+                                {/* Resource: Data Anggaran */}
+                                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                                    <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
+                                        <span className="text-xs font-bold text-slate-700 uppercase">Data Anggaran</span>
+                                    </div>
+                                    <div className="p-4 grid grid-cols-2 gap-3">
+                                        {[
+                                            { id: 'anggaran:create', label: 'Create' },
+                                            { id: 'anggaran:read', label: 'Read' },
+                                            { id: 'anggaran:update', label: 'Update' },
+                                            { id: 'anggaran:delete', label: 'Delete' }
+                                        ].map(feat => (
+                                            <label key={feat.id} className="flex items-start justify-start gap-3 cursor-pointer group">
+                                                <div className="flex items-center h-5">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20"
+                                                        checked={formData.Permissions.includes(feat.id)}
+                                                        onChange={(e) => {
+                                                            const checked = e.target.checked;
+                                                            setFormData(prev => ({
+                                                                ...prev,
+                                                                Permissions: checked 
+                                                                    ? [...prev.Permissions, feat.id]
+                                                                    : prev.Permissions.filter(p => p !== feat.id)
+                                                            }))
+                                                        }}
+                                                    />
+                                                </div>
+                                                <span className="text-sm font-medium text-slate-700 group-hover:text-slate-900 transition-colors leading-tight">{feat.label}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Resource: Dokumen Bukti */}
+                                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                                    <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
+                                        <span className="text-xs font-bold text-slate-700 uppercase">Dokumen Bukti</span>
+                                    </div>
+                                    <div className="p-4 grid grid-cols-2 gap-3">
+                                        {[
+                                            { id: 'dokumen:create', label: 'Create' },
+                                            { id: 'dokumen:read', label: 'Read' },
+                                            { id: 'dokumen:update', label: 'Update' },
+                                            { id: 'dokumen:delete', label: 'Delete' }
+                                        ].map(feat => (
+                                            <label key={feat.id} className="flex items-start justify-start gap-3 cursor-pointer group">
+                                                <div className="flex items-center h-5">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20"
+                                                        checked={formData.Permissions.includes(feat.id)}
+                                                        onChange={(e) => {
+                                                            const checked = e.target.checked;
+                                                            setFormData(prev => ({
+                                                                ...prev,
+                                                                Permissions: checked 
+                                                                    ? [...prev.Permissions, feat.id]
+                                                                    : prev.Permissions.filter(p => p !== feat.id)
+                                                            }))
+                                                        }}
+                                                    />
+                                                </div>
+                                                <span className="text-sm font-medium text-slate-700 group-hover:text-slate-900 transition-colors leading-tight">{feat.label}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Resource: Manajemen Sistem */}
+                                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                                    <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
+                                        <span className="text-xs font-bold text-slate-700 uppercase">Sistem Lanjutan</span>
+                                    </div>
+                                    <div className="p-4 flex flex-col gap-3">
+                                        {[
+                                            { id: 'users:manage', label: 'Manajemen Pengguna (Tambah, Edit, Hapus User)' },
+                                            { id: 'audit:read', label: 'Akses Audit Log (Log Perubahan Data)' },
+                                            { id: 'verification:manage', label: 'Akses Verifikasi Lanjut (Approve Dokumen)' }
+                                        ].map(feat => (
+                                            <label key={feat.id} className="flex items-start justify-start gap-3 cursor-pointer group">
+                                                <div className="flex items-center h-5">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20"
+                                                        checked={formData.Permissions.includes(feat.id)}
+                                                        onChange={(e) => {
+                                                            const checked = e.target.checked;
+                                                            setFormData(prev => ({
+                                                                ...prev,
+                                                                Permissions: checked 
+                                                                    ? [...prev.Permissions, feat.id]
+                                                                    : prev.Permissions.filter(p => p !== feat.id)
+                                                            }))
+                                                        }}
+                                                    />
+                                                </div>
+                                                <span className="text-sm font-medium text-slate-700 group-hover:text-slate-900 transition-colors leading-tight">{feat.label}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <div className="pt-4 flex gap-3">

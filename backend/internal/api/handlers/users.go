@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"time"
@@ -20,11 +21,12 @@ func (h *Handler) ListUsers(ctx echo.Context) error {
 	}
 
 	type UserResponse struct {
-		ID        string `json:"ID"`
-		Username  string `json:"Username"`
-		FullName  string `json:"FullName"`
-		Role      string `json:"Role"`
-		CreatedAt string `json:"CreatedAt"`
+		ID          string   `json:"ID"`
+		Username    string   `json:"Username"`
+		FullName    string   `json:"FullName"`
+		Role        string   `json:"Role"`
+		Permissions []string `json:"Permissions"`
+		CreatedAt   string   `json:"CreatedAt"`
 	}
 
 	response := make([]UserResponse, len(users))
@@ -42,12 +44,18 @@ func (h *Handler) ListUsers(ctx echo.Context) error {
 			createdAt = u.CreatedAt.Time.Format(time.RFC3339)
 		}
 
+		var perms []string
+		if len(u.Permissions) > 0 {
+			json.Unmarshal(u.Permissions, &perms)
+		}
+
 		response[i] = UserResponse{
-			ID:        idStr,
-			Username:  u.Username,
-			FullName:  u.FullName,
-			Role:      u.Role,
-			CreatedAt: createdAt,
+			ID:          idStr,
+			Username:    u.Username,
+			FullName:    u.FullName,
+			Role:        u.Role,
+			Permissions: perms,
+			CreatedAt:   createdAt,
 		}
 	}
 	return ctx.JSON(http.StatusOK, response)
@@ -69,32 +77,38 @@ func (h *Handler) CreateUser(ctx echo.Context) error {
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to hash password"})
 	}
 
+	permsBytes, _ := json.Marshal(body.Permissions)
+
 	user, err := h.queries.CreateUser(ctx.Request().Context(), db.CreateUserParams{
 		ID:           newPgUUID(),
 		Username:     body.Username,
 		PasswordHash: hashedPassword,
 		FullName:     body.FullName,
 		Role:         string(body.Role),
+		Permissions:  permsBytes,
 	})
 	if err != nil {
 		slog.Error("CreateUser failed", "error", err)
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to create user (maybe username already exists)"})
 	}
 
-	adminID, _ := uuid.Parse(claims.UserID)
-	h.activity.Log(ctx.Request().Context(), adminID, "CREATE_USER", "user", ptr(uuid.UUID(user.ID.Bytes)), map[string]interface{}{"username": body.Username}, ctx.RealIP(), ctx.Request().UserAgent())
-
 	createdAt := ""
 	if user.CreatedAt.Valid {
 		createdAt = user.CreatedAt.Time.Format(time.RFC3339)
 	}
 
+	var perms []string
+	if len(user.Permissions) > 0 {
+		json.Unmarshal(user.Permissions, &perms)
+	}
+
 	return ctx.JSON(http.StatusCreated, map[string]interface{}{
-		"ID":        pgUUIDToString(user.ID),
-		"Username":  user.Username,
-		"FullName":  user.FullName,
-		"Role":      user.Role,
-		"CreatedAt": createdAt,
+		"ID":          pgUUIDToString(user.ID),
+		"Username":    user.Username,
+		"FullName":    user.FullName,
+		"Role":        user.Role,
+		"Permissions": perms,
+		"CreatedAt":   createdAt,
 	})
 }
 
@@ -125,18 +139,24 @@ func (h *Handler) UpdateUser(ctx echo.Context, id openapi_types.UUID) error {
 	}
 
 	passwordHash := currentUser.PasswordHash
-	if body.Password != nil && *body.Password != "" {
-		hashed, err := h.auth.HashPassword(*body.Password)
+	if body.Password != nil {
+		hash, err := h.auth.HashPassword(string(*body.Password))
 		if err != nil {
 			return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to hash password"})
 		}
-		passwordHash = hashed
+		passwordHash = hash
+	}
+
+	permsBytes := currentUser.Permissions
+	if body.Permissions != nil {
+		permsBytes, _ = json.Marshal(*body.Permissions)
 	}
 
 	user, err := h.queries.UpdateUser(ctx.Request().Context(), db.UpdateUserParams{
 		ID:           uuidToPgUUID(uuid.UUID(id)),
 		FullName:     fullName,
 		Role:         role,
+		Permissions:  permsBytes,
 		PasswordHash: passwordHash,
 	})
 	if err != nil {
@@ -144,20 +164,23 @@ func (h *Handler) UpdateUser(ctx echo.Context, id openapi_types.UUID) error {
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to update user"})
 	}
 
-	adminID, _ := uuid.Parse(claims.UserID)
-	h.activity.Log(ctx.Request().Context(), adminID, "UPDATE_USER", "user", ptr(uuid.UUID(id)), map[string]interface{}{"username": currentUser.Username}, ctx.RealIP(), ctx.Request().UserAgent())
-
 	createdAt := ""
 	if user.CreatedAt.Valid {
 		createdAt = user.CreatedAt.Time.Format(time.RFC3339)
 	}
 
+	var perms []string
+	if len(user.Permissions) > 0 {
+		json.Unmarshal(user.Permissions, &perms)
+	}
+
 	return ctx.JSON(http.StatusOK, map[string]interface{}{
-		"ID":        pgUUIDToString(user.ID),
-		"Username":  user.Username,
-		"FullName":  user.FullName,
-		"Role":      user.Role,
-		"CreatedAt": createdAt,
+		"ID":          pgUUIDToString(user.ID),
+		"Username":    user.Username,
+		"FullName":    user.FullName,
+		"Role":        user.Role,
+		"Permissions": perms,
+		"CreatedAt":   createdAt,
 	})
 }
 
@@ -173,8 +196,5 @@ func (h *Handler) DeleteUser(ctx echo.Context, id openapi_types.UUID) error {
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to delete user"})
 	}
 
-	adminID, _ := uuid.Parse(claims.UserID)
-	h.activity.Log(ctx.Request().Context(), adminID, "DELETE_USER", "user", ptr(uuid.UUID(id)), nil, ctx.RealIP(), ctx.Request().UserAgent())
-
-	return ctx.NoContent(http.StatusNoContent)
+	return ctx.JSON(http.StatusOK, map[string]string{"message": "user deleted"})
 }

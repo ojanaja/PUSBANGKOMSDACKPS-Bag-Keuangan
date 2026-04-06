@@ -29,7 +29,7 @@ func TestAuthService_PasswordHashing(t *testing.T) {
 func TestAuthService_GenerateAndValidateToken(t *testing.T) {
 	svc := NewAuthService("super-secret")
 
-	token, err := svc.GenerateToken("u-1", "fauzan", "SUPER_ADMIN")
+	token, err := svc.GenerateToken("u-1", "fauzan", "SUPER_ADMIN", []string{})
 	if err != nil {
 		t.Fatalf("GenerateToken returned error: %v", err)
 	}

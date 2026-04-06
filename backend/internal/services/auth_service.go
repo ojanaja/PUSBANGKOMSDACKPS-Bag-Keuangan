@@ -18,9 +18,10 @@ func NewAuthService(jwtSecret string) *AuthService {
 }
 
 type Claims struct {
-	UserID   string `json:"user_id"`
-	Username string `json:"username"`
-	Role     string `json:"role"`
+	UserID      string   `json:"user_id"`
+	Username    string   `json:"username"`
+	Role        string   `json:"role"`
+	Permissions []string `json:"permissions"`
 	jwt.RegisteredClaims
 }
 
@@ -34,12 +35,13 @@ func (s *AuthService) CheckPasswordHash(password, hash string) bool {
 	return err == nil
 }
 
-func (s *AuthService) GenerateToken(userID, username, role string) (string, error) {
+func (s *AuthService) GenerateToken(userID, username, role string, permissions []string) (string, error) {
 	expirationTime := time.Now().Add(24 * time.Hour)
 	claims := &Claims{
-		UserID:   userID,
-		Username: username,
-		Role:     role,
+		UserID:      userID,
+		Username:    username,
+		Role:        role,
+		Permissions: permissions,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

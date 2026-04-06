@@ -137,6 +137,7 @@ func RequireRole(roles ...string) echo.MiddlewareFunc {
 				return c.JSON(http.StatusUnauthorized, map[string]string{"message": "Unauthorized"})
 			}
 
+			// We are deprecating rigid Roles, but keep this for backwards compatibility
 			for _, role := range roles {
 				if claims.Role == role {
 					return next(c)
@@ -144,6 +145,29 @@ func RequireRole(roles ...string) echo.MiddlewareFunc {
 			}
 
 			return c.JSON(http.StatusForbidden, map[string]string{"message": "Forbidden: insufficient permissions"})
+		}
+	}
+}
+
+func RequirePermission(permissions ...string) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			val := c.Get(UserClaimsKey)
+			claims, ok := val.(*services.Claims)
+			if !ok || claims == nil {
+				return c.JSON(http.StatusUnauthorized, map[string]string{"message": "Unauthorized"})
+			}
+
+			// If the user has any of the listed permissions, let them through
+			for _, requiredPerm := range permissions {
+				for _, userPerm := range claims.Permissions {
+					if userPerm == requiredPerm {
+						return next(c)
+					}
+				}
+			}
+
+			return c.JSON(http.StatusForbidden, map[string]string{"message": "Forbidden: missing required permission"})
 		}
 	}
 }

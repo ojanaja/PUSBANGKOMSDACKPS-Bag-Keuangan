@@ -7,14 +7,16 @@ export interface UserItem {
     Username: string
     FullName: string
     Role: UserRole
+    Permissions?: string[]
     CreatedAt: string
 }
 
 export interface UserFormData {
     username: string
     full_name: string
-    password: string
-    role: UserRole
+    password?: string
+    role?: string
+    Permissions?: string[]
 }
 
 export function useUsers() {
