@@ -322,7 +322,7 @@ export default function AnggaranPage() {
             {showImportModal && (
                 <ImportPreviewModal
                     onClose={() => setShowImportModal(false)}
-                    onImported={(t) => { setTahun(t); setShowImportModal(false) }}
+                    onImported={(t, b) => { setTahun(t); setBulan(b); setCurrentPathIds([]); setShowImportModal(false) }}
                     previewMutation={previewMutation}
                     confirmImportMutation={confirmImportMutation}
                 />

@@ -119,18 +119,6 @@ export function useAnggaran(tahun: number, bulan?: number) {
         }
     })
 
-    const importMutation = useMutation({
-        mutationFn: async ({ file, tahun_anggaran }: { file: File, tahun_anggaran: number }) => {
-            const formData = new FormData()
-            formData.append('file', file)
-            formData.append('tahun_anggaran', tahun_anggaran.toString())
-
-            return apiPost<{ programs_upserted?: number; akun_upserted?: number }>('/anggaran/import', formData)
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['anggaran'] })
-        }
-    })
 
     const previewMutation = useMutation({
         mutationFn: async ({ file }: { file: File }) => {
@@ -211,7 +199,6 @@ export function useAnggaran(tahun: number, bulan?: number) {
 
     return {
         query,
-        importMutation,
         previewMutation,
         confirmImportMutation,
         copyDataMutation,

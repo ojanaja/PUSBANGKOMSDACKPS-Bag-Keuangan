@@ -44,11 +44,14 @@ describe('useAnggaran', () => {
         expect(result.current.query.data).toEqual([])
     })
 
-    it('uploads import file and invalidates anggaran queries on success', async () => {
+    it('sends preview file as FormData', async () => {
         vi.mocked(apiGet).mockResolvedValueOnce([])
-        vi.mocked(apiPost).mockResolvedValueOnce({ programs_upserted: 2, akun_upserted: 4 })
-        const { queryClient, wrapper } = createWrapperAndClient()
-        const invalidateQueriesSpy = vi.spyOn(queryClient, 'invalidateQueries')
+        vi.mocked(apiPost).mockResolvedValueOnce({
+            format_detected: 'fa_detail',
+            nodes: [],
+            stats: { total_nodes: 0, by_jenis: {} }
+        })
+        const { wrapper } = createWrapperAndClient()
 
         const { result } = renderHook(() => useAnggaran(2025), { wrapper })
         const file = new File(['dummy'], 'anggaran.xlsx', {
@@ -56,15 +59,46 @@ describe('useAnggaran', () => {
         })
 
         await act(async () => {
-            await result.current.importMutation.mutateAsync({ file, tahun_anggaran: 2025 })
+            await result.current.previewMutation.mutateAsync({ file })
         })
 
         expect(apiPost).toHaveBeenCalledTimes(1)
-        expect(apiPost).toHaveBeenCalledWith('/anggaran/import', expect.any(FormData))
+        expect(apiPost).toHaveBeenCalledWith('/anggaran/preview', expect.any(FormData))
 
         const formDataArg = vi.mocked(apiPost).mock.calls[0][1] as FormData
         expect(formDataArg.get('file')).toBe(file)
-        expect(formDataArg.get('tahun_anggaran')).toBe('2025')
+    })
+
+    it('confirmImport sends JSON with tahun_anggaran, bulan, and nodes, then invalidates cache', async () => {
+        vi.mocked(apiGet).mockResolvedValueOnce([])
+        vi.mocked(apiPost).mockResolvedValueOnce({ nodes_upserted: 3 })
+        const { queryClient, wrapper } = createWrapperAndClient()
+        const invalidateQueriesSpy = vi.spyOn(queryClient, 'invalidateQueries')
+
+        const { result } = renderHook(() => useAnggaran(2025), { wrapper })
+
+        const nodes = [{
+            temp_id: 'temp-0', parent_temp_id: '', level: 0,
+            jenis: 'PROGRAM', kode: '054.01', uraian: 'Test',
+            pagu_revisi: '100', lock_pagu: '0',
+            realisasi_lalu: '0', realisasi_ini: '50',
+            realisasi_sd: '50', persentase: '50', sisa: '50'
+        }]
+
+        await act(async () => {
+            await result.current.confirmImportMutation.mutateAsync({
+                tahun_anggaran: 2025,
+                bulan: 3,
+                nodes
+            })
+        })
+
+        expect(apiPost).toHaveBeenCalledTimes(1)
+        expect(apiPost).toHaveBeenCalledWith('/anggaran/confirm-import', {
+            tahun_anggaran: 2025,
+            bulan: 3,
+            nodes
+        })
 
         expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['anggaran'] })
     })

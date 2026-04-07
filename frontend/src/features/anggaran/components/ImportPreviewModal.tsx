@@ -12,7 +12,7 @@ import { formatCurrency } from '@/lib/formatCurrency'
 
 interface ImportPreviewModalProps {
     onClose: () => void
-    onImported: (tahun: number) => void
+    onImported: (tahun: number, bulan: number) => void
     previewMutation: UseMutationResult<PreviewResult, Error, { file: File }>
     confirmImportMutation: UseMutationResult<{ nodes_upserted: number }, Error, { tahun_anggaran: number, bulan: number, nodes: PreviewNode[] }>
 }
@@ -500,7 +500,7 @@ export default function ImportPreviewModal({ onClose, onImported, previewMutatio
                 nodes: editedNodes
             })
             setSuccessResult(result)
-            onImported(importTahun)
+            onImported(importTahun, importBulan)
         } catch (e) {
             setError(e instanceof Error ? e.message : 'Gagal menyimpan data')
             setStep('preview')
@@ -810,7 +810,8 @@ export default function ImportPreviewModal({ onClose, onImported, previewMutatio
                             <>
                                 <button
                                     onClick={() => setStep('upload')}
-                                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                                    disabled={confirmImportMutation.isPending}
+                                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <ArrowLeft size={16} /> Kembali
                                 </button>
@@ -819,7 +820,11 @@ export default function ImportPreviewModal({ onClose, onImported, previewMutatio
                                     disabled={editedNodes.length === 0 || confirmImportMutation.isPending}
                                     className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
                                 >
-                                    <Save size={16} /> Konfirmasi & Simpan ({editedNodes.length} node)
+                                    {confirmImportMutation.isPending ? (
+                                        <><Loader2 size={16} className="animate-spin" /> Menyimpan...</>
+                                    ) : (
+                                        <><Save size={16} /> Konfirmasi & Simpan ({editedNodes.length} node)</>
+                                    )}
                                 </button>
                             </>
                         )}
