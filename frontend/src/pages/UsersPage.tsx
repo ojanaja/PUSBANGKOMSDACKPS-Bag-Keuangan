@@ -278,8 +278,7 @@ export default function UsersPage() {
                                         {[
                                             { id: 'anggaran:create', label: 'Create' },
                                             { id: 'anggaran:read', label: 'Read' },
-                                            { id: 'anggaran:update', label: 'Update' },
-                                            { id: 'anggaran:delete', label: 'Delete' }
+                                            { id: 'anggaran:update', label: 'Update' }
                                         ].map(feat => (
                                             <label key={feat.id} className="flex items-start justify-start gap-3 cursor-pointer group">
                                                 <div className="flex items-center h-5">
@@ -312,9 +311,7 @@ export default function UsersPage() {
                                     <div className="p-4 grid grid-cols-2 gap-3">
                                         {[
                                             { id: 'dokumen:create', label: 'Create' },
-                                            { id: 'dokumen:read', label: 'Read' },
-                                            { id: 'dokumen:update', label: 'Update' },
-                                            { id: 'dokumen:delete', label: 'Delete' }
+                                            { id: 'dokumen:read', label: 'Read' }
                                         ].map(feat => (
                                             <label key={feat.id} className="flex items-start justify-start gap-3 cursor-pointer group">
                                                 <div className="flex items-center h-5">
@@ -346,9 +343,7 @@ export default function UsersPage() {
                                     </div>
                                     <div className="p-4 flex flex-col gap-3">
                                         {[
-                                            { id: 'users:manage', label: 'Manajemen Pengguna (Tambah, Edit, Hapus User)' },
-                                            { id: 'audit:read', label: 'Akses Audit Log (Log Perubahan Data)' },
-                                            { id: 'verification:manage', label: 'Akses Verifikasi Lanjut (Approve Dokumen)' }
+                                            { id: 'users:manage', label: 'Manajemen Pengguna (Tambah, Edit, Hapus User)' }
                                         ].map(feat => (
                                             <label key={feat.id} className="flex items-start justify-start gap-3 cursor-pointer group">
                                                 <div className="flex items-center h-5">
