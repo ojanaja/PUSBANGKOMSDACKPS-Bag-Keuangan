@@ -36,7 +36,7 @@ services:
   backend:
     build:
       context: .
-      dockerfile: backend/Dockerfile.new
+      dockerfile: backend/Dockerfile
     container_name: keuangan-backend
     environment:
       - DB_URL=postgres://keuangan_admin:NasBpkDbPass2025!@db:5432/keuangan_pusbangkom?sslmode=disable

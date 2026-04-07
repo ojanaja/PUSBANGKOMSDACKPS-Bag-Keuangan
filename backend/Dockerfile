@@ -1,3 +1,4 @@
+# Use the root as context to support relative modules
 FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
@@ -5,12 +6,16 @@ WORKDIR /app
 # Install build dependencies
 RUN apk add --no-cache curl make jq git
 
-# Download Go modules
-COPY go.mod go.sum* ./
+# Copy the common dependency first to take advantage of caching
+COPY storage-service/ /app/storage-service/
+
+# Now setup backend
+WORKDIR /app/backend
+COPY backend/go.mod backend/go.sum* ./
 RUN if [ -f go.mod ]; then go mod download && go mod verify; fi
 
-# Copy application source code
-COPY . .
+# Copy backend source
+COPY backend/ .
 
 # Install tools required for code generation (sqlc, oapi-codegen)
 RUN go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.26.0 && \
@@ -33,7 +38,7 @@ WORKDIR /app
 RUN apk add --no-cache ca-certificates tzdata ghostscript
 
 # Copy the binary from the builder
-COPY --from=builder /app/main .
+COPY --from=builder /app/backend/main .
 
 # Expose port
 EXPOSE 8080
