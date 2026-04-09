@@ -26,8 +26,8 @@ function jsonResponse(data: unknown, status = 200) {
 
 describe('apiUrl', () => {
     it('prepends API base for relative paths', () => {
-        const url = apiUrl('/paket')
-        expect(url).toMatch(/\/api\/v1\/paket$/)
+        const url = apiUrl('/anggaran')
+        expect(url).toMatch(/\/api\/v1\/anggaran$/)
     })
 
     it('does not modify absolute URLs', () => {
