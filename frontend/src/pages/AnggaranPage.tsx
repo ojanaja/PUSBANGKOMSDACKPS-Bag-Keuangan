@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Upload, ChevronRight, X, RefreshCw, AlertCircle, Loader2, FolderKanban, FileText, Database, Eye, ExternalLink, Edit2 } from 'lucide-react'
+import { Upload, ChevronRight, X, RefreshCw, AlertCircle, Loader2, FolderKanban, FileText, Database, Eye, ExternalLink, Edit2, User, Clock, Copy } from 'lucide-react'
 import { useAnggaran, useAnggaranDokumen, type TreeNode } from '@/features/anggaran/application/useAnggaran'
 import FileDropzone from '@/components/common/FileDropzone'
 import EditPaguModal from '@/features/anggaran/components/EditPaguModal'
@@ -259,15 +259,15 @@ export default function AnggaranPage() {
                             {bulan > 1 && canCreate && (
                                 <button 
                                     onClick={() => {
-                                        if (confirm(`Salin data dari bulan sebelumnya? Anda dapat mulai melakukan penyesuaian setelah data disalin.`)) {
-                                            copyDataMutation.mutate({ tahun, fromBulan: bulan - 1, toBulan: bulan }, {
-                                                onError: (e) => alert(e instanceof Error ? e.message : 'Gagal menyalin data')
-                                            })
-                                        }
+                                        copyDataMutation.mutate({ tahun, fromBulan: bulan - 1, toBulan: bulan }, {
+                                            onSuccess: () => showToast('Data berhasil disalin dari bulan sebelumnya', 'success'),
+                                            onError: (e) => showToast(e instanceof Error ? e.message : 'Gagal menyalin data', 'error')
+                                        })
                                     }}
                                     disabled={copyDataMutation.isPending}
-                                    className="mt-6 px-4 py-2 bg-white border border-primary-300 text-primary-600 rounded-lg text-sm font-medium hover:bg-primary-50 transition-colors shadow-sm disabled:opacity-50"
+                                    className="mt-6 inline-flex items-center gap-2 px-4 py-2 bg-white border border-primary-300 text-primary-600 rounded-lg text-sm font-medium hover:bg-primary-50 transition-colors shadow-sm disabled:opacity-50"
                                 >
+                                    <Copy size={16} />
                                     {copyDataMutation.isPending ? 'Menyalin data...' : `Atau Salin Data dari Bulan ${bulan - 1}`}
                                 </button>
                             )}
@@ -331,89 +331,139 @@ export default function AnggaranPage() {
             {
                 uploadTarget && (
                     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setUploadTarget(null)}>
-                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl p-6" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-between mb-6">
+                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl flex flex-col" style={{ maxHeight: '85vh' }} onClick={(e) => e.stopPropagation()}>
+                            {/* Header - Fixed */}
+                            <div className="flex items-center justify-between px-8 py-5 border-b border-slate-100 shrink-0">
                                 <div>
                                     <h3 className="text-xl font-bold text-slate-900">Arsip Digital</h3>
-                                    <p className="text-base text-slate-600 mt-1 truncate max-w-[300px]" title={uploadTarget.uraian}>
-                                        Manajemen Dokumen Bukti untuk {uploadTarget.kode}
+                                    <p className="text-base text-slate-600 mt-1 truncate max-w-[400px]" title={uploadTarget.uraian}>
+                                        Manajemen Dokumen Bukti untuk <span className="font-semibold text-primary-700">{uploadTarget.kode}</span>
                                     </p>
                                 </div>
-                                <button onClick={() => setUploadTarget(null)} className="p-1 rounded-lg hover:bg-slate-100 shrink-0">
+                                <button onClick={() => setUploadTarget(null)} className="p-2 rounded-lg hover:bg-slate-100 shrink-0 transition-colors">
                                     <X size={20} className="text-slate-400" />
                                 </button>
                             </div>
 
-                            {currentUser?.Permissions?.includes('dokumen:create') && (
-                                <FileDropzone 
-                                    label="Unggah Dokumen Bukti" 
-                                    type="document" 
-                                    empty 
-                                    uploading={uploadBuktiMutation.isPending ? { progress: '' } : undefined}
-                                    onDrop={async (files: File[]) => {
-                                        if (files.length > 0) {
-                                            try {
-                                                await uploadBuktiMutation.mutateAsync({ id: uploadTarget.id, file: files[0] })
-                                                showToast('Dokumen berhasil diunggah', 'success')
-                                                refetchDocuments()
-                                            } catch (e) {
-                                                showToast('Gagal mengunggah dokumen', 'error')
+                            {/* Scrollable Body */}
+                            <div className="overflow-y-auto flex-1 px-8 py-6">
+                                {currentUser?.Permissions?.includes('dokumen:create') && (
+                                    <FileDropzone 
+                                        label="Unggah Dokumen Bukti" 
+                                        type="document" 
+                                        empty 
+                                        uploading={uploadBuktiMutation.isPending ? { progress: '' } : undefined}
+                                        onDrop={async (files: File[]) => {
+                                            if (files.length > 0) {
+                                                try {
+                                                    await uploadBuktiMutation.mutateAsync({ id: uploadTarget.id, file: files[0] })
+                                                    showToast('Dokumen berhasil diunggah', 'success')
+                                                    refetchDocuments()
+                                                } catch (e) {
+                                                    showToast('Gagal mengunggah dokumen', 'error')
+                                                }
                                             }
-                                        }
-                                    }} 
-                                />
-                            )}
+                                        }} 
+                                    />
+                                )}
 
-                            <div className="mt-6 space-y-3">
-                                {loadingDocs ? (
-                                    <div className="flex items-center justify-center py-4">
-                                        <Loader2 size={24} className="text-primary-500 animate-spin" />
+                                {/* Document List */}
+                                <div className="mt-6">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wider">Daftar Dokumen</h4>
+                                        {uploadDocuments.length > 0 && (
+                                            <span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded-full font-medium">
+                                                {uploadDocuments.length} dokumen
+                                            </span>
+                                        )}
                                     </div>
-                                ) : uploadDocuments.length === 0 ? (
-                                    <div className="text-center py-4 text-sm text-slate-500">
-                                        Belum ada dokumen yang diunggah.
-                                    </div>
-                                ) : (
-                                    uploadDocuments.map(doc => (
-                                        <div key={doc.id} className="flex flex-col gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl group hover:border-primary-300 transition-colors">
-                                            <div className="flex items-center gap-3">
-                                                <div className="p-2 bg-white rounded-lg shadow-sm">
-                                                    <FileText size={20} className="text-primary-500" />
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-semibold text-slate-800 truncate" title={doc.original_name}>{doc.original_name}</p>
-                                                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                                        <span className="text-[10px] text-slate-500 font-medium bg-slate-100 px-1.5 py-0.5 rounded uppercase tracking-wide shrink-0">
-                                                            {(doc.file_size_bytes / 1024).toFixed(1)} KB
-                                                        </span>
-                                                        <span className="text-xs text-slate-400 shrink-0">
-                                                            {new Date(doc.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                                        </span>
-                                                        <span className="text-xs text-slate-400 flex items-center gap-1 shrink-0">
-                                                            &bull; Diunggah oleh: <span className="font-medium text-slate-600">{doc.uploaded_by_name || 'Tidak diketahui'}</span>
-                                                        </span>
+
+                                    <div className="space-y-3">
+                                        {loadingDocs ? (
+                                            <div className="flex items-center justify-center py-8">
+                                                <Loader2 size={24} className="text-primary-500 animate-spin" />
+                                                <span className="ml-3 text-sm text-slate-500">Memuat dokumen...</span>
+                                            </div>
+                                        ) : uploadDocuments.length === 0 ? (
+                                            <div className="text-center py-8 text-sm text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                                                <FileText size={32} className="text-slate-300 mx-auto mb-2" />
+                                                Belum ada dokumen yang diunggah.
+                                            </div>
+                                        ) : (
+                                            uploadDocuments.map(doc => (
+                                                <div key={doc.id} className="p-4 bg-slate-50 border border-slate-200 rounded-xl group hover:border-primary-300 hover:shadow-sm transition-all">
+                                                    <div className="flex items-start gap-4">
+                                                        {/* File Icon */}
+                                                        <div className="p-2.5 bg-white rounded-lg shadow-sm border border-slate-100 shrink-0">
+                                                            <FileText size={22} className="text-primary-500" />
+                                                        </div>
+
+                                                        {/* File Info */}
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-sm font-semibold text-slate-800 truncate" title={doc.original_name}>
+                                                                {doc.original_name}
+                                                            </p>
+
+                                                            {/* Metadata Grid */}
+                                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-1.5 mt-2.5">
+                                                                <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                                                                    <User size={13} className="text-slate-400 shrink-0" />
+                                                                    <span className="text-slate-400">Pengunggah:</span>
+                                                                    <span className="font-semibold text-slate-700 truncate">{doc.uploaded_by_name || 'Tidak diketahui'}</span>
+                                                                </div>
+                                                                <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                                                                    <Clock size={13} className="text-slate-400 shrink-0" />
+                                                                    <span className="text-slate-400">Waktu:</span>
+                                                                    <span className="font-medium text-slate-600">
+                                                                        {new Date(doc.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                                                                    <FileText size={13} className="text-slate-400 shrink-0" />
+                                                                    <span className="text-slate-400">Ukuran:</span>
+                                                                    <span className="font-medium text-slate-600 uppercase tracking-wide">
+                                                                        {(doc.file_size_bytes / 1024).toFixed(1)} KB
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Action Buttons */}
+                                                        <div className="flex items-center gap-2 shrink-0">
+                                                            {(doc.mime_type.startsWith('image/') || doc.mime_type === 'application/pdf') && (
+                                                                <a
+                                                                    href={apiUrl(`/documents/${doc.id}`)}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="flex items-center gap-1.5 px-3 py-2 bg-sky-50 text-sky-700 hover:bg-sky-100 rounded-lg text-xs font-bold transition-all border border-sky-100"
+                                                                    title="Buka preview di tab baru"
+                                                                >
+                                                                    <Eye size={14} /> Lihat
+                                                                </a>
+                                                            )}
+                                                            <a
+                                                                href={apiUrl(`/documents/${doc.id}?download=true`)}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg text-xs font-bold transition-all border border-indigo-100"
+                                                                title="Unduh Dokumen"
+                                                            >
+                                                                <ExternalLink size={14} /> Unduh
+                                                            </a>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center gap-2">
-                                                    {doc.mime_type.startsWith('image/') || doc.mime_type === 'application/pdf' ? (
-                                                        <a href={apiUrl(`/documents/${doc.id}`)} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 text-sky-700 hover:bg-sky-100 rounded-lg text-xs font-bold transition-all border border-sky-100" title="Lihat Dokumen">
-                                                            <Eye size={14} /> Lihat
-                                                        </a>
-                                                    ) : null}
-                                                    <a href={apiUrl(`/documents/${doc.id}?download=true`)} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg text-xs font-bold transition-all border border-indigo-100" title="Unduh Dokumen">
-                                                        <ExternalLink size={14} /> Unduh
-                                                    </a>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))
-                                )}
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
                             </div>
 
-                            <div className="flex items-center justify-end gap-3 mt-6">
+                            {/* Footer - Fixed */}
+                            <div className="flex items-center justify-end gap-3 px-8 py-4 border-t border-slate-100 shrink-0">
                                 <button
                                     onClick={() => setUploadTarget(null)}
-                                    className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                                    className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
                                 >
                                     Tutup
                                 </button>
