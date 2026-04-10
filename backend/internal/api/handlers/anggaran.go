@@ -222,7 +222,6 @@ func (h *Handler) ConfirmAnggaranImport(ctx echo.Context) error {
 
 	type ConfirmPayload struct {
 		TahunAnggaran int           `json:"tahun_anggaran"`
-		Bulan         int           `json:"bulan"`
 		Nodes         []ConfirmNode `json:"nodes"`
 	}
 
@@ -235,11 +234,6 @@ func (h *Handler) ConfirmAnggaranImport(ctx echo.Context) error {
 	if payload.TahunAnggaran == 0 {
 		slog.Error("ConfirmAnggaranImport 400", "reason", "tahun_anggaran is 0")
 		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "tahun_anggaran is required"})
-	}
-
-	if payload.Bulan == 0 {
-		slog.Error("ConfirmAnggaranImport 400", "reason", "bulan is 0", "received", payload.Bulan)
-		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "bulan is required"})
 	}
 
 	if len(payload.Nodes) == 0 {
@@ -272,13 +266,13 @@ func (h *Handler) ConfirmAnggaranImport(ctx echo.Context) error {
 		var insertedID pgtype.UUID
 		err := tx.QueryRow(reqCtx, `
 			INSERT INTO anggaran_node (
-				id, parent_id, jenis, kode, uraian, tahun_anggaran, bulan,
+				id, parent_id, jenis, kode, uraian, tahun_anggaran,
 				pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini,
 				realisasi_sd_periode, persentase_realisasi, sisa_anggaran
 			) VALUES (
-				gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+				gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 			)
-			ON CONFLICT (COALESCE(parent_id, '00000000-0000-0000-0000-000000000000'::uuid), kode, bulan) DO UPDATE SET
+			ON CONFLICT (COALESCE(parent_id, '00000000-0000-0000-0000-000000000000'::uuid), kode) DO UPDATE SET
 				uraian = EXCLUDED.uraian,
 				pagu_revisi = EXCLUDED.pagu_revisi,
 				lock_pagu = EXCLUDED.lock_pagu,
@@ -289,7 +283,7 @@ func (h *Handler) ConfirmAnggaranImport(ctx echo.Context) error {
 				sisa_anggaran = EXCLUDED.sisa_anggaran
 			RETURNING id;
 		`,
-			parentID, node.Jenis, node.Kode, node.Uraian, payload.TahunAnggaran, payload.Bulan,
+			parentID, node.Jenis, node.Kode, node.Uraian, payload.TahunAnggaran,
 			mustDecimalNumeric(node.PaguRevisi), mustDecimalNumeric(node.LockPagu),
 			mustDecimalNumeric(node.RealisasiLalu), mustDecimalNumeric(node.RealisasiIni),
 			mustDecimalNumeric(node.RealisasiSD), mustDecimalNumeric(node.Persentase),
@@ -326,10 +320,7 @@ func mustDecimalNumeric(s string) pgtype.Numeric {
 }
 
 func (h *Handler) GetAnggaranTree(ctx echo.Context, params GetAnggaranTreeParams) error {
-	rows, err := h.queries.GetAnggaranTree(ctx.Request().Context(), db.GetAnggaranTreeParams{
-		TahunAnggaran: pgtype.Int4{Int32: int32(params.Tahun), Valid: true},
-		Bulan:         int32(params.Bulan),
-	})
+	rows, err := h.queries.GetAnggaranTree(ctx.Request().Context(), pgtype.Int4{Int32: int32(params.Tahun), Valid: true})
 	if err != nil {
 		slog.Error("GetAnggaranTree failed", "error", err)
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to retrieve Anggaran tree"})
