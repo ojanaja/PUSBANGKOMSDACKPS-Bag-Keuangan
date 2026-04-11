@@ -165,11 +165,22 @@ type CreateUserRequest struct {
 // CreateUserRequestRole defines model for CreateUserRequest.Role.
 type CreateUserRequestRole string
 
+// SnapshotRequest defines model for SnapshotRequest.
+type SnapshotRequest struct {
+	// Periode Format YYYY-MM
+	Periode string `json:"periode"`
+}
+
 // UpdateAnggaranRequest defines model for UpdateAnggaranRequest.
 type UpdateAnggaranRequest struct {
 	PaguRevisi           *string `json:"pagu_revisi,omitempty"`
 	RealisasiPeriodeIni  *string `json:"realisasi_periode_ini,omitempty"`
 	RealisasiPeriodeLalu *string `json:"realisasi_periode_lalu,omitempty"`
+}
+
+// UpdateLockPaguRequest defines model for UpdateLockPaguRequest.
+type UpdateLockPaguRequest struct {
+	LockPagu string `json:"lock_pagu"`
 }
 
 // UpdateUserRequest defines model for UpdateUserRequest.
@@ -221,11 +232,17 @@ type UploadBuktiAnggaranMultipartBody struct {
 // ImportAnggaranDataMultipartRequestBody defines body for ImportAnggaranData for multipart/form-data ContentType.
 type ImportAnggaranDataMultipartRequestBody ImportAnggaranDataMultipartBody
 
+// CreateAnggaranSnapshotJSONRequestBody defines body for CreateAnggaranSnapshot for application/json ContentType.
+type CreateAnggaranSnapshotJSONRequestBody = SnapshotRequest
+
 // UploadBuktiAnggaranMultipartRequestBody defines body for UploadBuktiAnggaran for multipart/form-data ContentType.
 type UploadBuktiAnggaranMultipartRequestBody UploadBuktiAnggaranMultipartBody
 
 // UpdateAnggaranNodeJSONRequestBody defines body for UpdateAnggaranNode for application/json ContentType.
 type UpdateAnggaranNodeJSONRequestBody = UpdateAnggaranRequest
+
+// UpdateLockPaguJSONRequestBody defines body for UpdateLockPagu for application/json ContentType.
+type UpdateLockPaguJSONRequestBody = UpdateLockPaguRequest
 
 // CreateUserJSONRequestBody defines body for CreateUser for application/json ContentType.
 type CreateUserJSONRequestBody = CreateUserRequest
@@ -238,6 +255,9 @@ type ServerInterface interface {
 	// Import Anggaran data from Excel/CSV
 	// (POST /anggaran/import)
 	ImportAnggaranData(ctx echo.Context) error
+	// Create a snapshot of the current anggaran state
+	// (POST /anggaran/snapshot)
+	CreateAnggaranSnapshot(ctx echo.Context) error
 	// Get Anggaran hierarchy tree
 	// (GET /anggaran/tree)
 	GetAnggaranTree(ctx echo.Context, params GetAnggaranTreeParams) error
@@ -250,6 +270,9 @@ type ServerInterface interface {
 	// Get documents for an anggaran node
 	// (GET /anggaran/{id}/documents)
 	GetAnggaranDokumenByNode(ctx echo.Context, id openapi_types.UUID) error
+	// Update the lock pagu value for a specific node
+	// (PUT /anggaran/{id}/lock)
+	UpdateLockPagu(ctx echo.Context, id openapi_types.UUID) error
 	// Download a document by ID
 	// (GET /documents/{id})
 	DownloadDocument(ctx echo.Context, id openapi_types.UUID) error
@@ -286,6 +309,17 @@ func (w *ServerInterfaceWrapper) ImportAnggaranData(ctx echo.Context) error {
 
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.ImportAnggaranData(ctx)
+	return err
+}
+
+// CreateAnggaranSnapshot converts echo context to params.
+func (w *ServerInterfaceWrapper) CreateAnggaranSnapshot(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(CookieAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.CreateAnggaranSnapshot(ctx)
 	return err
 }
 
@@ -353,6 +387,24 @@ func (w *ServerInterfaceWrapper) GetAnggaranDokumenByNode(ctx echo.Context) erro
 
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.GetAnggaranDokumenByNode(ctx, id)
+	return err
+}
+
+// UpdateLockPagu converts echo context to params.
+func (w *ServerInterfaceWrapper) UpdateLockPagu(ctx echo.Context) error {
+	var err error
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", ctx.Param("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter id: %s", err))
+	}
+
+	ctx.Set(CookieAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.UpdateLockPagu(ctx, id)
 	return err
 }
 
@@ -479,10 +531,12 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 	}
 
 	router.POST(baseURL+"/anggaran/import", wrapper.ImportAnggaranData)
+	router.POST(baseURL+"/anggaran/snapshot", wrapper.CreateAnggaranSnapshot)
 	router.GET(baseURL+"/anggaran/tree", wrapper.GetAnggaranTree)
 	router.POST(baseURL+"/anggaran/upload-bukti", wrapper.UploadBuktiAnggaran)
 	router.PUT(baseURL+"/anggaran/:id", wrapper.UpdateAnggaranNode)
 	router.GET(baseURL+"/anggaran/:id/documents", wrapper.GetAnggaranDokumenByNode)
+	router.PUT(baseURL+"/anggaran/:id/lock", wrapper.UpdateLockPagu)
 	router.GET(baseURL+"/documents/:id", wrapper.DownloadDocument)
 	router.GET(baseURL+"/healthz", wrapper.GetHealthz)
 	router.GET(baseURL+"/readyz", wrapper.GetReadyz)
@@ -496,32 +550,35 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
+	"t4mk7ftTvJ6s/xsAAP//ifAnOccgAAA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

@@ -11,6 +11,24 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createAnggaranSnapshot = `-- name: CreateAnggaranSnapshot :exec
+INSERT INTO anggaran_history (
+    id, anggaran_node_id, parent_id, jenis, kode, uraian, tahun_anggaran,
+    pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini,
+    realisasi_sd_periode, persentase_realisasi, sisa_anggaran, snapshot_periode
+)
+SELECT 
+    gen_random_uuid(), id, parent_id, jenis, kode, uraian, tahun_anggaran,
+    pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini,
+    realisasi_sd_periode, persentase_realisasi, sisa_anggaran, $1
+FROM anggaran_node
+`
+
+func (q *Queries) CreateAnggaranSnapshot(ctx context.Context, snapshotPeriode string) error {
+	_, err := q.db.Exec(ctx, createAnggaranSnapshot, snapshotPeriode)
+	return err
+}
+
 const getAnggaranDokumenByID = `-- name: GetAnggaranDokumenByID :one
 SELECT id, anggaran_node_id, file_hash_sha256, original_name, mime_type, file_size_bytes, uploaded_by, created_at FROM anggaran_dokumen_bukti
 WHERE id = $1
@@ -281,6 +299,39 @@ func (q *Queries) InsertRealisasiSP2D(ctx context.Context, arg InsertRealisasiSP
 		&i.NilaiCair,
 		&i.Keterangan,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateLockPagu = `-- name: UpdateLockPagu :one
+UPDATE anggaran_node
+SET lock_pagu = $1
+WHERE id = $2
+RETURNING id, parent_id, jenis, kode, uraian, tahun_anggaran, pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini, realisasi_sd_periode, persentase_realisasi, sisa_anggaran
+`
+
+type UpdateLockPaguParams struct {
+	LockPagu pgtype.Numeric `json:"lock_pagu"`
+	ID       pgtype.UUID    `json:"id"`
+}
+
+func (q *Queries) UpdateLockPagu(ctx context.Context, arg UpdateLockPaguParams) (AnggaranNode, error) {
+	row := q.db.QueryRow(ctx, updateLockPagu, arg.LockPagu, arg.ID)
+	var i AnggaranNode
+	err := row.Scan(
+		&i.ID,
+		&i.ParentID,
+		&i.Jenis,
+		&i.Kode,
+		&i.Uraian,
+		&i.TahunAnggaran,
+		&i.PaguRevisi,
+		&i.LockPagu,
+		&i.RealisasiPeriodeLalu,
+		&i.RealisasiPeriodeIni,
+		&i.RealisasiSdPeriode,
+		&i.PersentaseRealisasi,
+		&i.SisaAnggaran,
 	)
 	return i, err
 }
