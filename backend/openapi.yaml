@@ -81,6 +81,21 @@ components:
         realisasi_periode_ini:
           type: string
 
+    UpdateLockPaguRequest:
+      type: object
+      properties:
+        lock_pagu:
+          type: string
+      required: [lock_pagu]
+
+    SnapshotRequest:
+      type: object
+      properties:
+        periode:
+          type: string
+          description: "Format YYYY-MM"
+      required: [periode]
+
     AnggaranDokumenItem:
       type: object
       properties:
@@ -268,6 +283,52 @@ paths:
           description: Unauthorized
         '500':
           description: Internal Server Error
+
+  /anggaran/snapshot:
+    post:
+      operationId: createAnggaranSnapshot
+      summary: Create a snapshot of the current anggaran state
+      tags: [Anggaran]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SnapshotRequest'
+      responses:
+        '200':
+          description: Snapshot created successfully
+        '400':
+          description: Bad request
+        '500':
+          description: Internal Server Error
+
+  /anggaran/{id}/lock:
+    put:
+      operationId: updateLockPagu
+      summary: Update the lock pagu value for a specific node
+      tags: [Anggaran]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLockPaguRequest'
+      responses:
+        '200':
+          description: Lock Pagu updated successfully
+        '400':
+          description: Bad request
+        '404':
+          description: Node not found
+
   /anggaran/{id}:
     put:
       operationId: updateAnggaranNode
