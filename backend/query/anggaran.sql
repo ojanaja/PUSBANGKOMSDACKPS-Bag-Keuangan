@@ -17,6 +17,24 @@ ON CONFLICT (id) DO UPDATE SET
     sisa_anggaran = EXCLUDED.sisa_anggaran
 RETURNING *;
 
+-- name: UpdateLockPagu :one
+UPDATE anggaran_node
+SET lock_pagu = $1
+WHERE id = $2
+RETURNING *;
+
+-- name: CreateAnggaranSnapshot :exec
+INSERT INTO anggaran_history (
+    id, anggaran_node_id, parent_id, jenis, kode, uraian, tahun_anggaran,
+    pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini,
+    realisasi_sd_periode, persentase_realisasi, sisa_anggaran, snapshot_periode
+)
+SELECT 
+    gen_random_uuid(), id, parent_id, jenis, kode, uraian, tahun_anggaran,
+    pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini,
+    realisasi_sd_periode, persentase_realisasi, sisa_anggaran, $1
+FROM anggaran_node;
+
 -- name: GetAnggaranTree :many
 WITH RECURSIVE tree AS (
     SELECT 
