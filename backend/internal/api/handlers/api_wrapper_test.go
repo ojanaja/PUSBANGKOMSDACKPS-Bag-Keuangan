@@ -12,6 +12,12 @@ import (
 
 type wrapperTestServer struct{}
 
+func (s *wrapperTestServer) CreateAnggaranSnapshot(ctx echo.Context) error {
+	return ctx.NoContent(http.StatusNoContent)
+}
+func (s *wrapperTestServer) UpdateLockPagu(ctx echo.Context, id openapi_types.UUID) error {
+	return ctx.NoContent(http.StatusNoContent)
+}
 func (s *wrapperTestServer) ImportAnggaranData(ctx echo.Context) error {
 	return ctx.NoContent(http.StatusNoContent)
 }
@@ -60,7 +66,7 @@ func TestGeneratedWrapper_RoutesAndParams(t *testing.T) {
 		want   int
 	}{
 		{method: http.MethodPost, path: "/anggaran/import", want: http.StatusNoContent},
-		{method: http.MethodGet, path: "/anggaran/tree?tahun=2026&bulan=1", want: http.StatusNoContent},
+		{method: http.MethodGet, path: "/anggaran/tree?tahun=2026", want: http.StatusNoContent},
 		{method: http.MethodPost, path: "/anggaran/upload-bukti", want: http.StatusNoContent},
 		{method: http.MethodPut, path: "/anggaran/" + validID, want: http.StatusNoContent},
 		{method: http.MethodGet, path: "/anggaran/" + validID + "/documents", want: http.StatusNoContent},
@@ -105,10 +111,8 @@ func TestGeneratedWrapper_InvalidQueryAndRequiredParams(t *testing.T) {
 		method string
 		path   string
 	}{
-		{name: "anggaran tree missing required tahun", method: http.MethodGet, path: "/anggaran/tree?bulan=1"},
-		{name: "anggaran tree missing required bulan", method: http.MethodGet, path: "/anggaran/tree?tahun=2026"},
-		{name: "anggaran tree invalid tahun", method: http.MethodGet, path: "/anggaran/tree?tahun=bad&bulan=1"},
-		{name: "anggaran tree invalid bulan", method: http.MethodGet, path: "/anggaran/tree?tahun=2026&bulan=bad"},
+		{name: "anggaran tree missing required tahun", method: http.MethodGet, path: "/anggaran/tree"},
+		{name: "anggaran tree invalid tahun", method: http.MethodGet, path: "/anggaran/tree?tahun=bad"},
 	}
 
 	for _, tc := range tests {

@@ -7,6 +7,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"strconv"
+	"strings"
 
 	authmw "github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/api/middleware"
 	"github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/db"
@@ -25,6 +26,10 @@ func (h *Handler) ImportAnggaranData(ctx echo.Context) error {
 	file, err := ctx.FormFile("file")
 	if err != nil {
 		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "file is required"})
+	}
+	filenameLower := strings.ToLower(file.Filename)
+	if !strings.HasSuffix(filenameLower, ".xls") && !strings.HasSuffix(filenameLower, ".xlsx") {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "Only Excel (.xls, .xlsx) files are allowed"})
 	}
 	tahunStr := ctx.FormValue("tahun_anggaran")
 	tahun, err := strconv.Atoi(tahunStr)
@@ -120,6 +125,10 @@ func (h *Handler) PreviewAnggaranImport(ctx echo.Context) error {
 	file, err := ctx.FormFile("file")
 	if err != nil {
 		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "file is required"})
+	}
+	filenameLower := strings.ToLower(file.Filename)
+	if !strings.HasSuffix(filenameLower, ".xls") && !strings.HasSuffix(filenameLower, ".xlsx") {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "Only Excel (.xls, .xlsx) files are allowed"})
 	}
 
 	src, err := openMultipartFile(file)
@@ -508,4 +517,44 @@ func (h *Handler) GetAnggaranDokumenByNode(ctx echo.Context, id types.UUID) erro
 	}
 
 	return ctx.JSON(http.StatusOK, result)
+}
+
+func (h *Handler) UpdateLockPagu(ctx echo.Context, id types.UUID) error {
+	var req UpdateLockPaguRequest
+	if err := ctx.Bind(&req); err != nil {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "invalid request body"})
+	}
+
+	lockPagu := mustDecimalNumeric(req.LockPagu)
+	nodeID := uuidToPgUUID(uuid.UUID(id))
+
+	_, err := h.queries.UpdateLockPagu(ctx.Request().Context(), db.UpdateLockPaguParams{
+		LockPagu: lockPagu,
+		ID:       nodeID,
+	})
+	if err != nil {
+		slog.Error("UpdateLockPagu failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to update lock pagu"})
+	}
+
+	return ctx.JSON(http.StatusOK, map[string]string{"message": "Lock Pagu updated successfully"})
+}
+
+func (h *Handler) CreateAnggaranSnapshot(ctx echo.Context) error {
+	var req SnapshotRequest
+	if err := ctx.Bind(&req); err != nil {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "invalid request body"})
+	}
+
+	if req.Periode == "" {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "periode is required"})
+	}
+
+	err := h.queries.CreateAnggaranSnapshot(ctx.Request().Context(), req.Periode)
+	if err != nil {
+		slog.Error("CreateAnggaranSnapshot failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to create snapshot"})
+	}
+
+	return ctx.JSON(http.StatusOK, map[string]string{"message": "Snapshot created successfully"})
 }
