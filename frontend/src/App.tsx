@@ -11,6 +11,7 @@ import AppLoader from '@/shared/ui/AppLoader'
 
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const AnggaranPage = lazy(() => import('./pages/AnggaranPage'))
+const AnggaranImportPage = lazy(() => import('./pages/AnggaranImportPage'))
 const UsersPage = lazy(() => import('./pages/UsersPage'))
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
 
@@ -57,6 +58,7 @@ const router = createBrowserRouter([
         children: [
           { index: true, element: <Navigate to="/anggaran" replace /> },
           { path: 'anggaran', element: <Suspense fallback={<PageLoader />}><AnggaranPage /></Suspense> },
+          { path: 'anggaran/import', element: <Suspense fallback={<PageLoader />}><AnggaranImportPage /></Suspense> },
           { path: 'users', element: <Suspense fallback={<PageLoader />}><UsersPage /></Suspense> },
           { path: '*', element: <Suspense fallback={<PageLoader />}><NotFoundPage /></Suspense> },
         ],

@@ -1,8 +1,11 @@
-import { NavLink } from 'react-router-dom'
+import { useState } from 'react'
+import { NavLink, useLocation } from 'react-router-dom'
 import {
-    Database,
+    BarChart3,
+    FileSpreadsheet,
     ChevronLeft,
     ChevronRight,
+    ChevronDown,
     Users
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
@@ -12,14 +15,38 @@ interface NavItem {
     label: string
     path: string
     icon: React.ReactNode
-    permissions?: string[] // if empty/undefined, accessible to all logged-in users
+    permissions?: string[]
 }
 
-const navItems: NavItem[] = [
+interface NavGroup {
+    label: string
+    icon: React.ReactNode
+    items: NavItem[]
+}
+
+type NavEntry = NavItem | NavGroup
+
+function isNavGroup(entry: NavEntry): entry is NavGroup {
+    return 'items' in entry
+}
+
+const navEntries: NavEntry[] = [
     {
-        label: 'Pemantauan Anggaran',
-        path: '/anggaran',
-        icon: <Database size={22} />,
+        label: 'Anggaran',
+        icon: <BarChart3 size={22} />,
+        items: [
+            {
+                label: 'Dashboard',
+                path: '/anggaran',
+                icon: <BarChart3 size={18} />,
+            },
+            {
+                label: 'Import DIPA/RKKS',
+                path: '/anggaran/import',
+                icon: <FileSpreadsheet size={18} />,
+                permissions: ['anggaran:create'],
+            },
+        ],
     },
     {
         label: 'Manajemen Pengguna',
@@ -32,10 +59,25 @@ const navItems: NavItem[] = [
 export default function Sidebar() {
     const user = useAuthStore((s) => s.user)
     const { isCollapsed, toggle } = useSidebarStore()
+    const location = useLocation()
+    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['Anggaran']))
 
-    const filteredNav = navItems.filter((item) => 
-        (user ? (!item.permissions || item.permissions.some(p => user.Permissions?.includes(p))) : false)
-    )
+    const toggleGroup = (label: string) => {
+        setExpandedGroups(prev => {
+            const next = new Set(prev)
+            if (next.has(label)) {
+                next.delete(label)
+            } else {
+                next.add(label)
+            }
+            return next
+        })
+    }
+
+    const hasPermission = (item: NavItem) =>
+        user ? (!item.permissions || item.permissions.some(p => user.Permissions?.includes(p))) : false
+
+    const filterItems = (items: NavItem[]) => items.filter(hasPermission)
 
     return (
         <aside
@@ -58,25 +100,98 @@ export default function Sidebar() {
             </div>
 
             <nav className="flex-1 py-4 overflow-y-auto" aria-label="Menu utama">
-                <ul className="space-y-2 px-2">
-                    {filteredNav.map((item) => (
-                        <li key={item.path}>
-                            <NavLink
-                                to={item.path}
-                                end={item.path === '/'}
-                                className={({ isActive }) =>
-                                    `flex items-center gap-3 px-3 py-3.5 rounded-lg text-base font-medium transition-all duration-200 group ${isActive
-                                        ? 'bg-primary-600 text-white shadow-md shadow-primary-600/30'
-                                        : 'text-slate-400 hover:bg-sidebar-hover hover:text-white'
-                                    } ${isCollapsed ? 'justify-center' : ''}`
-                                }
-                                title={isCollapsed ? item.label : undefined}
-                            >
-                                <span className="flex-shrink-0">{item.icon}</span>
-                                {!isCollapsed && <span className="truncate">{item.label}</span>}
-                            </NavLink>
-                        </li>
-                    ))}
+                <ul className="space-y-1 px-2">
+                    {navEntries.map((entry) => {
+                        if (isNavGroup(entry)) {
+                            const visibleItems = filterItems(entry.items)
+                            if (visibleItems.length === 0) return null
+
+                            const isGroupActive = visibleItems.some(item => location.pathname === item.path || location.pathname.startsWith(item.path + '/'))
+                            const isExpanded = expandedGroups.has(entry.label)
+
+                            if (isCollapsed) {
+                                // In collapsed mode, show group icon linking to first child
+                                const first = visibleItems[0]
+                                return (
+                                    <li key={entry.label}>
+                                        <NavLink
+                                            to={first.path}
+                                            className={`flex items-center justify-center px-3 py-3.5 rounded-lg text-base font-medium transition-all duration-200 ${isGroupActive
+                                                ? 'bg-primary-600 text-white shadow-md shadow-primary-600/30'
+                                                : 'text-slate-400 hover:bg-sidebar-hover hover:text-white'
+                                                }`}
+                                            title={entry.label}
+                                        >
+                                            <span className="flex-shrink-0">{entry.icon}</span>
+                                        </NavLink>
+                                    </li>
+                                )
+                            }
+
+                            return (
+                                <li key={entry.label}>
+                                    {/* Group header */}
+                                    <button
+                                        onClick={() => toggleGroup(entry.label)}
+                                        className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg text-base font-medium transition-all duration-200 ${isGroupActive
+                                            ? 'text-white'
+                                            : 'text-slate-400 hover:bg-sidebar-hover hover:text-white'
+                                            }`}
+                                    >
+                                        <span className="flex-shrink-0">{entry.icon}</span>
+                                        <span className="truncate flex-1 text-left">{entry.label}</span>
+                                        <ChevronDown
+                                            size={16}
+                                            className={`transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'}`}
+                                        />
+                                    </button>
+                                    {/* Sub-items */}
+                                    {isExpanded && (
+                                        <ul className="mt-1 ml-5 space-y-0.5 border-l border-white/10 pl-3">
+                                            {visibleItems.map((item) => (
+                                                <li key={item.path}>
+                                                    <NavLink
+                                                        to={item.path}
+                                                        end
+                                                        className={({ isActive }) =>
+                                                            `flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${isActive
+                                                                ? 'bg-primary-600 text-white shadow-md shadow-primary-600/30'
+                                                                : 'text-slate-400 hover:bg-sidebar-hover hover:text-white'
+                                                            }`
+                                                        }
+                                                    >
+                                                        <span className="flex-shrink-0">{item.icon}</span>
+                                                        <span className="truncate">{item.label}</span>
+                                                    </NavLink>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </li>
+                            )
+                        }
+
+                        // Regular item
+                        if (!hasPermission(entry)) return null
+                        return (
+                            <li key={entry.path}>
+                                <NavLink
+                                    to={entry.path}
+                                    end={entry.path === '/'}
+                                    className={({ isActive }) =>
+                                        `flex items-center gap-3 px-3 py-3.5 rounded-lg text-base font-medium transition-all duration-200 group ${isActive
+                                            ? 'bg-primary-600 text-white shadow-md shadow-primary-600/30'
+                                            : 'text-slate-400 hover:bg-sidebar-hover hover:text-white'
+                                        } ${isCollapsed ? 'justify-center' : ''}`
+                                    }
+                                    title={isCollapsed ? entry.label : undefined}
+                                >
+                                    <span className="flex-shrink-0">{entry.icon}</span>
+                                    {!isCollapsed && <span className="truncate">{entry.label}</span>}
+                                </NavLink>
+                            </li>
+                        )
+                    })}
                 </ul>
             </nav>
 
