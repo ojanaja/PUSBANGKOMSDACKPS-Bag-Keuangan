@@ -23,7 +23,7 @@ function mockStores({ role, isCollapsed = false, toggle = vi.fn() }: { role: Rol
             Username: 'tester',
             FullName: 'Tester',
             Role: role,
-            Permissions: role === 'SUPER_ADMIN' ? ['users:manage'] : [],
+            Permissions: role === 'SUPER_ADMIN' ? ['users:manage', 'anggaran:create'] : [],
         },
     }
 
@@ -45,7 +45,7 @@ describe('Sidebar', () => {
         vi.clearAllMocks()
     })
 
-    it('shows role-allowed menus for SUPER_ADMIN', () => {
+    it('shows Anggaran group and Manajemen Pengguna for SUPER_ADMIN', () => {
         mockStores({ role: 'SUPER_ADMIN' })
 
         render(
@@ -54,7 +54,12 @@ describe('Sidebar', () => {
             </MemoryRouter>,
         )
 
-        expect(screen.getByText('Pemantauan Anggaran')).toBeInTheDocument()
+        // Group header
+        expect(screen.getByText('Anggaran')).toBeInTheDocument()
+        // Sub-items (Anggaran group is expanded by default)
+        expect(screen.getByText('Dashboard')).toBeInTheDocument()
+        expect(screen.getByText('Import DIPA/RKKS')).toBeInTheDocument()
+        // Standalone item
         expect(screen.getByText('Manajemen Pengguna')).toBeInTheDocument()
     })
 
@@ -67,11 +72,13 @@ describe('Sidebar', () => {
             </MemoryRouter>,
         )
 
-        expect(screen.getByText('Pemantauan Anggaran')).toBeInTheDocument()
+        // Dashboard is visible to all but Import DIPA only to anggaran:create
+        expect(screen.getByText('Dashboard')).toBeInTheDocument()
+        expect(screen.queryByText('Import DIPA/RKKS')).not.toBeInTheDocument()
         expect(screen.queryByText('Manajemen Pengguna')).not.toBeInTheDocument()
     })
 
-    it('renders collapsed variant and uses title tooltip labels', () => {
+    it('renders collapsed variant and shows group icon with tooltip', () => {
         mockStores({ role: 'SUPER_ADMIN', isCollapsed: true })
 
         render(
@@ -81,7 +88,8 @@ describe('Sidebar', () => {
         )
 
         expect(screen.queryByText('Keuangan Pusbangkom')).not.toBeInTheDocument()
-        expect(screen.getByTitle('Pemantauan Anggaran')).toBeInTheDocument()
+        // In collapsed mode, group shows a link with title
+        expect(screen.getByTitle('Anggaran')).toBeInTheDocument()
         expect(screen.getByTitle('Manajemen Pengguna')).toBeInTheDocument()
     })
 
@@ -95,8 +103,9 @@ describe('Sidebar', () => {
             </MemoryRouter>,
         )
 
+        // The toggle button is the last button in the sidebar
         const buttons = screen.getAllByRole('button')
-        const toggleButton = buttons[0]
+        const toggleButton = buttons[buttons.length - 1]
         await user.click(toggleButton)
 
         expect(toggle).toHaveBeenCalledTimes(1)
@@ -119,7 +128,7 @@ describe('Sidebar', () => {
             </MemoryRouter>,
         )
 
-        expect(screen.queryByText('Pemantauan Anggaran')).not.toBeInTheDocument()
+        expect(screen.queryByText('Dashboard')).not.toBeInTheDocument()
         expect(screen.queryByText('Manajemen Pengguna')).not.toBeInTheDocument()
     })
 })

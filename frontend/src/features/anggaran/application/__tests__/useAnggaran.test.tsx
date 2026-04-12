@@ -69,7 +69,7 @@ describe('useAnggaran', () => {
         expect(formDataArg.get('file')).toBe(file)
     })
 
-    it('confirmImport sends JSON with tahun_anggaran, bulan, and nodes, then invalidates cache', async () => {
+    it('confirmImport sends JSON with tahun_anggaran and nodes, then invalidates cache', async () => {
         vi.mocked(apiGet).mockResolvedValueOnce([])
         vi.mocked(apiPost).mockResolvedValueOnce({ nodes_upserted: 3 })
         const { queryClient, wrapper } = createWrapperAndClient()
@@ -88,7 +88,6 @@ describe('useAnggaran', () => {
         await act(async () => {
             await result.current.confirmImportMutation.mutateAsync({
                 tahun_anggaran: 2025,
-                bulan: 3,
                 nodes
             })
         })
@@ -96,7 +95,6 @@ describe('useAnggaran', () => {
         expect(apiPost).toHaveBeenCalledTimes(1)
         expect(apiPost).toHaveBeenCalledWith('/anggaran/confirm-import', {
             tahun_anggaran: 2025,
-            bulan: 3,
             nodes
         })
 
