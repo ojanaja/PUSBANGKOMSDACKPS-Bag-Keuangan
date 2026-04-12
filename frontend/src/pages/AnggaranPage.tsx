@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Upload, ChevronRight, X, RefreshCw, AlertCircle, Loader2, FolderKanban, FileText, Database, Eye, ExternalLink, Edit2, User, Clock, Copy } from 'lucide-react'
+import { Upload, ChevronRight, X, RefreshCw, AlertCircle, Loader2, FolderKanban, FileText, Database, Eye, ExternalLink, Edit2, User, Clock, Download } from 'lucide-react'
 import { useAnggaran, useAnggaranDokumen, type TreeNode } from '@/features/anggaran/application/useAnggaran'
 import FileDropzone from '@/components/common/FileDropzone'
 import EditPaguModal from '@/features/anggaran/components/EditPaguModal'
@@ -9,13 +9,6 @@ import { useAuthStore } from '@/stores/authStore'
 import { formatCurrency } from '@/lib/formatCurrency'
 import { FISCAL_YEAR_OPTIONS } from '@/shared/config/constants'
 import { useToast } from '@/shared/hooks/useToast'
-
-const MONTH_OPTIONS = [
-    { value: 1, label: 'Januari' }, { value: 2, label: 'Februari' }, { value: 3, label: 'Maret' },
-    { value: 4, label: 'April' }, { value: 5, label: 'Mei' }, { value: 6, label: 'Juni' },
-    { value: 7, label: 'Juli' }, { value: 8, label: 'Agustus' }, { value: 9, label: 'September' },
-    { value: 10, label: 'Oktober' }, { value: 11, label: 'November' }, { value: 12, label: 'Desember' }
-]
 
 function Breadcrumbs({ path, onNavigate }: { path: TreeNode[], onNavigate: (index: number) => void }) {
     return (
@@ -118,12 +111,11 @@ export default function AnggaranPage() {
     
     const [showImportModal, setShowImportModal] = useState(false)
     const [tahun, setTahun] = useState(new Date().getFullYear())
-    const [bulan, setBulan] = useState(new Date().getMonth() + 1)
     const [currentPathIds, setCurrentPathIds] = useState<string[]>([])
     const [uploadTarget, setUploadTarget] = useState<TreeNode | null>(null)
     const [editTarget, setEditTarget] = useState<TreeNode | null>(null)
 
-    const { query, previewMutation, confirmImportMutation, updatePaguMutation, uploadBuktiMutation, copyDataMutation } = useAnggaran(tahun, bulan)
+    const { query, previewMutation, confirmImportMutation, updatePaguMutation, uploadBuktiMutation } = useAnggaran(tahun)
     const { data: uploadDocuments = [], refetch: refetchDocuments, isLoading: loadingDocs } = useAnggaranDokumen(uploadTarget?.id || null)
 
     const tree = query.data || []
@@ -166,18 +158,6 @@ export default function AnggaranPage() {
                             ))}
                         </select>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <label className="text-base text-slate-600 font-medium">Bulan:</label>
-                        <select
-                            value={bulan}
-                            onChange={(e) => { setBulan(Number(e.target.value)); setCurrentPathIds([]); }}
-                            className="border border-slate-200 rounded-lg px-3 py-3 text-base bg-white"
-                        >
-                            {MONTH_OPTIONS.map(m => (
-                                <option key={m.value} value={m.value}>{m.label}</option>
-                            ))}
-                        </select>
-                    </div>
                     <button
                         onClick={() => query.refetch()}
                         disabled={loading}
@@ -188,13 +168,23 @@ export default function AnggaranPage() {
                     </button>
 
                     {canCreate && (
-                        <button
-                            onClick={() => setShowImportModal(true)}
-                            className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors shadow-sm"
-                        >
-                            <Upload size={16} />
-                            Unggah Excel/CSV
-                        </button>
+                        <>
+                            <a
+                                href="/templates/template_anggaran.xlsx"
+                                download
+                                className="inline-flex items-center gap-2 px-4 py-2.5 border border-emerald-200 text-emerald-700 bg-emerald-50 rounded-lg text-sm font-medium hover:bg-emerald-100 transition-colors shadow-sm"
+                            >
+                                <Download size={16} />
+                                Download Template
+                            </a>
+                            <button
+                                onClick={() => setShowImportModal(true)}
+                                className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors shadow-sm"
+                            >
+                                <Upload size={16} />
+                                Unggah Excel
+                            </button>
+                        </>
                     )}
                 </div>
             </div>
@@ -253,24 +243,8 @@ export default function AnggaranPage() {
                     ) : tree.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-20 text-center">
                             <Upload size={40} className="text-slate-300 mb-3" />
-                            <p className="text-base text-slate-600 font-medium">Belum ada data anggaran untuk bulan ini</p>
-                            <p className="text-sm text-slate-500 mt-1">Klik tombol "Unggah Excel/CSV" di atas untuk memasukkan data</p>
-
-                            {bulan > 1 && canCreate && (
-                                <button 
-                                    onClick={() => {
-                                        copyDataMutation.mutate({ tahun, fromBulan: bulan - 1, toBulan: bulan }, {
-                                            onSuccess: () => showToast('Data berhasil disalin dari bulan sebelumnya', 'success'),
-                                            onError: (e) => showToast(e instanceof Error ? e.message : 'Gagal menyalin data', 'error')
-                                        })
-                                    }}
-                                    disabled={copyDataMutation.isPending}
-                                    className="mt-6 inline-flex items-center gap-2 px-4 py-2 bg-white border border-primary-300 text-primary-600 rounded-lg text-sm font-medium hover:bg-primary-50 transition-colors shadow-sm disabled:opacity-50"
-                                >
-                                    <Copy size={16} />
-                                    {copyDataMutation.isPending ? 'Menyalin data...' : `Atau Salin Data dari Bulan ${bulan - 1}`}
-                                </button>
-                            )}
+                            <p className="text-base text-slate-600 font-medium">Belum ada data anggaran</p>
+                            <p className="text-sm text-slate-500 mt-1">Klik tombol "Unggah Excel" di atas untuk memasukkan data</p>
                         </div>
                     ) : (
                         <table className="w-full text-sm">
@@ -322,7 +296,7 @@ export default function AnggaranPage() {
             {showImportModal && (
                 <ImportPreviewModal
                     onClose={() => setShowImportModal(false)}
-                    onImported={(t, b) => { setTahun(t); setBulan(b); setCurrentPathIds([]); setShowImportModal(false) }}
+                    onImported={(t) => { setTahun(t); setCurrentPathIds([]); setShowImportModal(false) }}
                     previewMutation={previewMutation}
                     confirmImportMutation={confirmImportMutation}
                 />

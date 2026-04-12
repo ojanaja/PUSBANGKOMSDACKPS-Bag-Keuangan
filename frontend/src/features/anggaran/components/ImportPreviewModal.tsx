@@ -7,14 +7,14 @@ import {
 } from 'lucide-react'
 import type { UseMutationResult } from '@tanstack/react-query'
 import type { PreviewNode, PreviewResult } from '@/features/anggaran/application/useAnggaran'
-import { FISCAL_YEAR_OPTIONS, MONTH_OPTIONS } from '@/shared/config/constants'
+import { FISCAL_YEAR_OPTIONS } from '@/shared/config/constants'
 import { formatCurrency } from '@/lib/formatCurrency'
 
 interface ImportPreviewModalProps {
     onClose: () => void
-    onImported: (tahun: number, bulan: number) => void
+    onImported: (tahun: number) => void
     previewMutation: UseMutationResult<PreviewResult, Error, { file: File }>
-    confirmImportMutation: UseMutationResult<{ nodes_upserted: number }, Error, { tahun_anggaran: number, bulan: number, nodes: PreviewNode[] }>
+    confirmImportMutation: UseMutationResult<{ nodes_upserted: number }, Error, { tahun_anggaran: number, nodes: PreviewNode[] }>
 }
 
 type Step = 'upload' | 'preview' | 'saving'
@@ -334,7 +334,6 @@ export default function ImportPreviewModal({ onClose, onImported, previewMutatio
     const [step, setStep] = useState<Step>('upload')
     const [importFile, setImportFile] = useState<File | null>(null)
     const [importTahun, setImportTahun] = useState(new Date().getFullYear())
-    const [importBulan, setImportBulan] = useState(new Date().getMonth() + 1)
     const [isDragging, setIsDragging] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -496,11 +495,10 @@ export default function ImportPreviewModal({ onClose, onImported, previewMutatio
         try {
             const result = await confirmImportMutation.mutateAsync({
                 tahun_anggaran: importTahun,
-                bulan: importBulan,
                 nodes: editedNodes
             })
             setSuccessResult(result)
-            onImported(importTahun, importBulan)
+            onImported(importTahun)
         } catch (e) {
             setError(e instanceof Error ? e.message : 'Gagal menyimpan data')
             setStep('preview')
@@ -577,31 +575,17 @@ export default function ImportPreviewModal({ onClose, onImported, previewMutatio
                     {/* === STEP 1: UPLOAD === */}
                     {step === 'upload' && (
                         <div className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Tahun Anggaran</label>
-                                    <select
-                                        value={importTahun}
-                                        onChange={(e) => setImportTahun(Number(e.target.value))}
-                                        className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm"
-                                    >
-                                        {FISCAL_YEAR_OPTIONS.map(y => (
-                                            <option key={y} value={y}>{y}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Data Bulan (Snapshot)</label>
-                                    <select
-                                        value={importBulan}
-                                        onChange={(e) => setImportBulan(Number(e.target.value))}
-                                        className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm"
-                                    >
-                                        {MONTH_OPTIONS.map(m => (
-                                            <option key={m.value} value={m.value}>{m.label}</option>
-                                        ))}
-                                    </select>
-                                </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1.5">Tahun Anggaran</label>
+                                <select
+                                    value={importTahun}
+                                    onChange={(e) => setImportTahun(Number(e.target.value))}
+                                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm"
+                                >
+                                    {FISCAL_YEAR_OPTIONS.map(y => (
+                                        <option key={y} value={y}>{y}</option>
+                                    ))}
+                                </select>
                             </div>
 
                             <div
