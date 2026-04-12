@@ -81,7 +81,7 @@ export default function ImportModal({ onClose, onImported, importMutation }: Imp
                     onClick={() => fileInputRef.current?.click()}
                     className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer ${isDragging ? 'border-primary-400 bg-primary-50' : importFile ? 'border-emerald-400 bg-emerald-50' : 'border-slate-300 hover:border-primary-400'}`}
                 >
-                    <input ref={fileInputRef} type="file" accept=".csv,.xlsx" onChange={handleFileSelect} className="hidden" />
+                    <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleFileSelect} className="hidden" />
                     {importFile ? (
                         <>
                             <CheckCircle2 size={32} className="mx-auto text-emerald-500 mb-2" />
@@ -91,8 +91,8 @@ export default function ImportModal({ onClose, onImported, importMutation }: Imp
                     ) : (
                         <>
                             <Upload size={32} className="mx-auto text-slate-300 mb-2" />
-                            <p className="text-sm text-slate-600 font-medium">Drag & drop file CSV di sini</p>
-                            <p className="text-xs text-slate-400 mt-1">atau klik untuk memilih file</p>
+                            <p className="text-sm text-slate-600 font-medium">Seret file Excel ke sini</p>
+                            <p className="text-xs text-slate-400 mt-1">atau klik untuk memilih file (.xlsx, .xls)</p>
                         </>
                     )}
                 </div>
@@ -131,8 +131,7 @@ export default function ImportModal({ onClose, onImported, importMutation }: Imp
                 </div>
 
                 <p className="text-xs text-slate-400 mt-4">
-                    Format: CSV dengan kolom ProgramKode, ProgramUraian, KegiatanKode, KegiatanUraian,
-                    OutputKode, OutputUraian, SubOutputKode, SubOutputUraian, AkunKode, AkunUraian, Pagu, Realisasi, Sisa
+                    Format: File Excel (.xlsx / .xls) dari laporan SPAN/SAKTI atau e-Monitoring.
                 </p>
             </div>
         </div>
