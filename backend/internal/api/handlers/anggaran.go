@@ -124,25 +124,30 @@ func (h *Handler) ImportAnggaranData(ctx echo.Context) error {
 func (h *Handler) PreviewAnggaranImport(ctx echo.Context) error {
 	file, err := ctx.FormFile("file")
 	if err != nil {
+		slog.Error("PreviewAnggaranImport 400", "reason", "ctx.FormFile failed", "error", err)
 		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "file is required"})
 	}
 	filenameLower := strings.ToLower(file.Filename)
 	if !strings.HasSuffix(filenameLower, ".xls") && !strings.HasSuffix(filenameLower, ".xlsx") {
+		slog.Error("PreviewAnggaranImport 400", "reason", "invalid extension", "filename", filenameLower)
 		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "Only Excel (.xls, .xlsx) files are allowed"})
 	}
 
 	src, err := openMultipartFile(file)
 	if err != nil {
+		slog.Error("PreviewAnggaranImport 500", "reason", "openMultipartFile failed", "error", err)
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to open file"})
 	}
 	defer src.Close()
 
 	nodes, format, err := services.DetectAndParseExcel(src)
 	if err != nil {
+		slog.Error("PreviewAnggaranImport 400", "reason", "DetectAndParseExcel failed", "error", err)
 		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": fmt.Sprintf("Parse error: %s", err)})
 	}
 
 	if len(nodes) == 0 {
+		slog.Error("PreviewAnggaranImport 400", "reason", "no nodes found in excel")
 		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "No data could be parsed from the file"})
 	}
 
@@ -165,7 +170,7 @@ func (h *Handler) PreviewAnggaranImport(ctx echo.Context) error {
 
 	previewNodes := make([]PreviewNode, 0, len(nodes))
 	// Track temp_id for each level to build parent references
-	var levelTempIDs [10]string
+	var levelTempIDs [20]string
 
 	jenisCounts := make(map[string]int)
 
@@ -194,7 +199,7 @@ func (h *Handler) PreviewAnggaranImport(ctx echo.Context) error {
 		})
 
 		levelTempIDs[node.Level] = tempID
-		for j := node.Level + 1; j < 10; j++ {
+		for j := node.Level + 1; j < 20; j++ {
 			levelTempIDs[j] = ""
 		}
 
@@ -329,12 +334,41 @@ func mustDecimalNumeric(s string) pgtype.Numeric {
 }
 
 func (h *Handler) GetAnggaranTree(ctx echo.Context, params GetAnggaranTreeParams) error {
-	rows, err := h.queries.GetAnggaranTree(ctx.Request().Context(), pgtype.Int4{Int32: int32(params.Tahun), Valid: true})
+	tahun := pgtype.Int4{Int32: int32(params.Tahun), Valid: true}
+
+	// If a snapshot periode is specified, fetch from history table
+	if params.Periode != nil && *params.Periode != "" {
+		rows, err := h.queries.GetAnggaranHistoryTree(ctx.Request().Context(), db.GetAnggaranHistoryTreeParams{
+			TahunAnggaran:   tahun,
+			SnapshotPeriode: *params.Periode,
+		})
+		if err != nil {
+			slog.Error("GetAnggaranHistoryTree failed", "error", err)
+			return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to retrieve Anggaran history tree"})
+		}
+		return ctx.JSON(http.StatusOK, rows)
+	}
+
+	// Default: fetch live data
+	rows, err := h.queries.GetAnggaranTree(ctx.Request().Context(), tahun)
 	if err != nil {
 		slog.Error("GetAnggaranTree failed", "error", err)
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to retrieve Anggaran tree"})
 	}
 	return ctx.JSON(http.StatusOK, rows)
+}
+
+func (h *Handler) GetAnggaranSnapshots(ctx echo.Context, params GetAnggaranSnapshotsParams) error {
+	tahun := pgtype.Int4{Int32: int32(params.Tahun), Valid: true}
+	snapshots, err := h.queries.GetAvailableSnapshots(ctx.Request().Context(), tahun)
+	if err != nil {
+		slog.Error("GetAvailableSnapshots failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to retrieve snapshots"})
+	}
+	if snapshots == nil {
+		snapshots = []string{}
+	}
+	return ctx.JSON(http.StatusOK, snapshots)
 }
 
 func (h *Handler) UpdateAnggaranNode(ctx echo.Context, id types.UUID) error {
@@ -548,6 +582,12 @@ func (h *Handler) CreateAnggaranSnapshot(ctx echo.Context) error {
 
 	if req.Periode == "" {
 		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "periode is required"})
+	}
+
+	// First, delete any existing snapshot for this period
+	if err := h.queries.DeleteAnggaranSnapshot(ctx.Request().Context(), req.Periode); err != nil {
+		slog.Error("DeleteAnggaranSnapshot failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to clear existing snapshot"})
 	}
 
 	err := h.queries.CreateAnggaranSnapshot(ctx.Request().Context(), req.Periode)
