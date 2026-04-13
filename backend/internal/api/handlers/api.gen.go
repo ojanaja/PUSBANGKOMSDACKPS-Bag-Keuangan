@@ -220,6 +220,12 @@ type ImportAnggaranDataMultipartBody struct {
 
 // GetAnggaranTreeParams defines parameters for GetAnggaranTree.
 type GetAnggaranTreeParams struct {
+	Tahun   int     `form:"tahun" json:"tahun"`
+	Periode *string `form:"periode" json:"periode,omitempty"`
+}
+
+// GetAnggaranSnapshotsParams defines parameters for GetAnggaranSnapshots.
+type GetAnggaranSnapshotsParams struct {
 	Tahun int `form:"tahun" json:"tahun"`
 }
 
@@ -260,6 +266,7 @@ type ServerInterface interface {
 	CreateAnggaranSnapshot(ctx echo.Context) error
 	// Get Anggaran hierarchy tree
 	// (GET /anggaran/tree)
+	GetAnggaranSnapshots(ctx echo.Context, params GetAnggaranSnapshotsParams) error
 	GetAnggaranTree(ctx echo.Context, params GetAnggaranTreeParams) error
 	// Upload a document as proof for an anggaran node
 	// (POST /anggaran/upload-bukti)
@@ -338,8 +345,30 @@ func (w *ServerInterfaceWrapper) GetAnggaranTree(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter tahun: %s", err))
 	}
 
+	// ------------- Optional query parameter "periode" -------------
+	if periodeVal := ctx.QueryParam("periode"); periodeVal != "" {
+		params.Periode = &periodeVal
+	}
+
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.GetAnggaranTree(ctx, params)
+	return err
+}
+
+// GetAnggaranSnapshots converts echo context to params.
+func (w *ServerInterfaceWrapper) GetAnggaranSnapshots(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(CookieAuthScopes, []string{})
+
+	var params GetAnggaranSnapshotsParams
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "tahun", ctx.QueryParams(), &params.Tahun, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter tahun: %s", err))
+	}
+
+	err = w.Handler.GetAnggaranSnapshots(ctx, params)
 	return err
 }
 

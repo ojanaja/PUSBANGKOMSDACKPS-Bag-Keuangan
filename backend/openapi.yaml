@@ -244,6 +244,12 @@ paths:
           required: true
           schema:
             type: integer
+        - name: periode
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Snapshot periode string (e.g. 2026-04-Rev). If empty or omitted, returns current live data.
       responses:
         '200':
           description: Anggaran tree data
@@ -253,6 +259,26 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/AnggaranNode'
+  /anggaran/snapshots:
+    get:
+      operationId: getAnggaranSnapshots
+      summary: List available snapshot periods for a fiscal year
+      tags: [Anggaran]
+      parameters:
+        - name: tahun
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of snapshot period strings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
   /anggaran/upload-bukti:
     post:
       operationId: uploadBuktiAnggaran
