@@ -15,6 +15,7 @@ interface ImportPreviewModalProps {
     onImported: (tahun: number) => void
     previewMutation: UseMutationResult<PreviewResult, Error, { file: File }>
     confirmImportMutation: UseMutationResult<{ nodes_upserted: number }, Error, { tahun_anggaran: number, nodes: PreviewNode[] }>
+    createSnapshotMutation: UseMutationResult<unknown, Error, { periode: string }>
 }
 
 type Step = 'upload' | 'preview' | 'saving'
@@ -330,12 +331,29 @@ function PreviewTreeRow({
     )
 }
 
-export default function ImportPreviewModal({ onClose, onImported, previewMutation, confirmImportMutation }: ImportPreviewModalProps) {
+export default function ImportPreviewModal({ onClose, onImported, previewMutation, confirmImportMutation, createSnapshotMutation }: ImportPreviewModalProps) {
     const [step, setStep] = useState<Step>('upload')
     const [importFile, setImportFile] = useState<File | null>(null)
     const [importTahun, setImportTahun] = useState(new Date().getFullYear())
+    const [importBulan, setImportBulan] = useState(new Date().getMonth() + 1)
+    const [importRevisi, setImportRevisi] = useState('1')
     const [isDragging, setIsDragging] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
+
+    const MONTH_OPTIONS = [
+        { value: 1, label: 'Januari' },
+        { value: 2, label: 'Februari' },
+        { value: 3, label: 'Maret' },
+        { value: 4, label: 'April' },
+        { value: 5, label: 'Mei' },
+        { value: 6, label: 'Juni' },
+        { value: 7, label: 'Juli' },
+        { value: 8, label: 'Agustus' },
+        { value: 9, label: 'September' },
+        { value: 10, label: 'Oktober' },
+        { value: 11, label: 'November' },
+        { value: 12, label: 'Desember' }
+    ]
 
     // Preview state
     const [previewData, setPreviewData] = useState<PreviewResult | null>(null)
@@ -497,6 +515,18 @@ export default function ImportPreviewModal({ onClose, onImported, previewMutatio
                 tahun_anggaran: importTahun,
                 nodes: editedNodes
             })
+
+            // Trigger snapshot otomatis setiap kali revisi DIPA berhasil diupload
+            const formatedBulan = String(importBulan).padStart(2, '0')
+            let periodeStr = `${importTahun}-${formatedBulan}`
+            if (importRevisi && importRevisi.trim() !== '') {
+                periodeStr += `-Rev${importRevisi.trim()}`
+            } else {
+                // fallback if empty
+                periodeStr += `-Rev`
+            }
+            await createSnapshotMutation.mutateAsync({ periode: periodeStr }).catch(console.error);
+
             setSuccessResult(result)
             onImported(importTahun)
         } catch (e) {
@@ -575,19 +605,42 @@ export default function ImportPreviewModal({ onClose, onImported, previewMutatio
                     {/* === STEP 1: UPLOAD === */}
                     {step === 'upload' && (
                         <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1.5">Tahun Anggaran</label>
-                                <select
-                                    value={importTahun}
-                                    onChange={(e) => setImportTahun(Number(e.target.value))}
-                                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm"
-                                >
-                                    {FISCAL_YEAR_OPTIONS.map(y => (
-                                        <option key={y} value={y}>{y}</option>
-                                    ))}
-                                </select>
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Tahun Anggaran</label>
+                                    <select
+                                        value={importTahun}
+                                        onChange={(e) => setImportTahun(Number(e.target.value))}
+                                        className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm"
+                                    >
+                                        {FISCAL_YEAR_OPTIONS.map(y => (
+                                            <option key={y} value={y}>{y}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Bulan</label>
+                                    <select
+                                        value={importBulan}
+                                        onChange={(e) => setImportBulan(Number(e.target.value))}
+                                        className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm"
+                                    >
+                                        {MONTH_OPTIONS.map(m => (
+                                            <option key={m.value} value={m.value}>{m.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Label Revisi</label>
+                                    <input
+                                        type="text"
+                                        value={importRevisi}
+                                        onChange={(e) => setImportRevisi(e.target.value)}
+                                        className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm"
+                                        placeholder="e.g. 1"
+                                    />
+                                </div>
                             </div>
-
                             <div
                                 onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
                                 onDragLeave={() => setIsDragging(false)}

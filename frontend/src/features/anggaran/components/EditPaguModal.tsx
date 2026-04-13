@@ -8,10 +8,12 @@ interface EditPaguModalProps {
     node: TreeNode
     onClose: () => void
     updatePaguMutation: UseMutationResult<unknown, Error, { id: string, data: Record<string, string> }>
+    updateLockPaguMutation: UseMutationResult<unknown, Error, { id: string, lock_pagu: string }>
 }
 
-export default function EditPaguModal({ node, onClose, updatePaguMutation }: EditPaguModalProps) {
+export default function EditPaguModal({ node, onClose, updatePaguMutation, updateLockPaguMutation }: EditPaguModalProps) {
     const [paguRevisi, setPaguRevisi] = useState(node.pagu_revisi.toString())
+    const [lockPagu, setLockPagu] = useState(node.lock_pagu.toString())
     const [realisasiLalu, setRealisasiLalu] = useState(node.realisasi_periode_lalu.toString())
     const [realisasiIni, setRealisasiIni] = useState(node.realisasi_periode_ini.toString())
     const [error, setError] = useState<string | null>(null)
@@ -22,15 +24,22 @@ export default function EditPaguModal({ node, onClose, updatePaguMutation }: Edi
         setError(null)
 
         try {
-            await updatePaguMutation.mutateAsync({
-                id: node.id,
-                data: {
-                    pagu_revisi: paguRevisi,
-                    realisasi_periode_lalu: realisasiLalu,
-                    realisasi_periode_ini: realisasiIni
-                }
-            })
-            showToast('Berhasil mengubah nilai anggaran', 'success')
+            // Kita bisa menjalankan kedua mutasi secara paralel (hanya mengubah apa yang diperlukan, tapi UI saat ini mengirim keduanya sekalian)
+            await Promise.all([
+                updatePaguMutation.mutateAsync({
+                    id: node.id,
+                    data: {
+                        pagu_revisi: paguRevisi,
+                        realisasi_periode_lalu: realisasiLalu,
+                        realisasi_periode_ini: realisasiIni
+                    }
+                }),
+                updateLockPaguMutation.mutateAsync({
+                    id: node.id,
+                    lock_pagu: lockPagu
+                })
+            ])
+            showToast('Berhasil mengubah nilai anggaran & lock pagu', 'success')
             onClose()
         } catch (e) {
             const msg = e instanceof Error ? e.message : 'Terjadi kesalahan'
@@ -60,7 +69,17 @@ export default function EditPaguModal({ node, onClose, updatePaguMutation }: Edi
                                 type="number"
                                 value={paguRevisi}
                                 onChange={e => setPaguRevisi(e.target.value)}
-                                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-primary-500 focus:ring focus:ring-primary-100"
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-amber-700 mb-1.5">Lock Pagu (Rp)</label>
+                            <input
+                                type="number"
+                                value={lockPagu}
+                                onChange={e => setLockPagu(e.target.value)}
+                                className="w-full border border-amber-200 bg-amber-50 rounded-lg px-3 py-2 text-sm focus:border-amber-500 focus:ring focus:ring-amber-100"
                                 required
                             />
                         </div>
@@ -103,10 +122,10 @@ export default function EditPaguModal({ node, onClose, updatePaguMutation }: Edi
                         </button>
                         <button
                             type="submit"
-                            disabled={updatePaguMutation.isPending}
+                            disabled={updatePaguMutation.isPending || updateLockPaguMutation.isPending}
                             className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
-                            {updatePaguMutation.isPending ? (
+                            {(updatePaguMutation.isPending || updateLockPaguMutation.isPending) ? (
                                 <><Loader2 size={16} className="animate-spin" /> Menyimpan...</>
                             ) : (
                                 <><CheckCircle2 size={16} /> Simpan</>

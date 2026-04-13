@@ -12,7 +12,7 @@ export default function AnggaranImportPage() {
     const [tahun] = useState(new Date().getFullYear())
     const [lastImportResult, setLastImportResult] = useState<{ tahun: number } | null>(null)
 
-    const { previewMutation, confirmImportMutation } = useAnggaran(tahun)
+    const { previewMutation, confirmImportMutation, createSnapshotMutation } = useAnggaran(tahun)
 
     if (!canCreate) {
         return (
@@ -115,6 +115,7 @@ export default function AnggaranImportPage() {
                     }}
                     previewMutation={previewMutation}
                     confirmImportMutation={confirmImportMutation}
+                    createSnapshotMutation={createSnapshotMutation}
                 />
             )}
         </div>

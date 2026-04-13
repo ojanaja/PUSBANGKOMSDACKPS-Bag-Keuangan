@@ -98,7 +98,7 @@ export interface PreviewNode {
 }
 
 export interface PreviewResult {
-    format_detected: 'fa_detail' | 'emon' | 'unknown'
+    format_detected: 'fa_detail' | 'emon' | 'rkks' | 'unknown'
     nodes: PreviewNode[]
     stats: {
         total_nodes: number
@@ -106,13 +106,25 @@ export interface PreviewResult {
     }
 }
 
-export function useAnggaran(tahun: number) {
+export function useAnggaranSnapshots(tahun: number) {
+    return useQuery({
+        queryKey: ['anggaran', 'snapshots', tahun],
+        queryFn: async () => {
+            const data = await apiGet<string[]>(`/anggaran/snapshots?tahun=${tahun}`)
+            return data || []
+        }
+    })
+}
+
+export function useAnggaran(tahun: number, periode?: string) {
     const queryClient = useQueryClient()
 
     const query = useQuery({
-        queryKey: ['anggaran', tahun],
+        queryKey: ['anggaran', tahun, periode || 'live'],
         queryFn: async () => {
-            const data = await apiGet<APIAnggaranNode[]>(`/anggaran/tree?tahun=${tahun}`)
+            const params = new URLSearchParams({ tahun: String(tahun) })
+            if (periode) params.set('periode', periode)
+            const data = await apiGet<APIAnggaranNode[]>(`/anggaran/tree?${params}`)
             return buildTree(data || [])
         }
     })
@@ -149,6 +161,16 @@ export function useAnggaran(tahun: number) {
         }
     })
 
+    const updateLockPaguMutation = useMutation({
+        mutationFn: async ({ id, lock_pagu }: { id: string, lock_pagu: string }) => {
+            return apiPut(`/anggaran/${id}/lock`, { lock_pagu })
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['anggaran'] })
+        }
+    })
+
+
     const uploadBuktiMutation = useMutation({
         mutationFn: async ({ id, file }: { id: string, file: File }) => {
             const formData = new FormData()
@@ -161,12 +183,20 @@ export function useAnggaran(tahun: number) {
         }
     })
 
+    const createSnapshotMutation = useMutation({
+        mutationFn: async ({ periode }: { periode: string }) => {
+            return apiPost('/anggaran/snapshot', { periode })
+        }
+    })
+
     return {
         query,
         previewMutation,
         confirmImportMutation,
         updatePaguMutation,
-        uploadBuktiMutation
+        updateLockPaguMutation,
+        uploadBuktiMutation,
+        createSnapshotMutation
     }
 }
 
