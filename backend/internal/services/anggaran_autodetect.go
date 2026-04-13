@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/csv"
 	"io"
+	"log/slog"
 	"strings"
 
 	"github.com/xuri/excelize/v2"
@@ -14,6 +15,7 @@ type AnggaranFormat string
 const (
 	FormatFADetail AnggaranFormat = "fa_detail"
 	FormatEMON     AnggaranFormat = "emon"
+	FormatRKKS     AnggaranFormat = "rkks"
 	FormatUnknown  AnggaranFormat = "unknown"
 )
 
@@ -48,6 +50,9 @@ func DetectAndParseExcel(reader io.Reader) ([]AnggaranNodeImport, AnggaranFormat
 	case FormatEMON:
 		nodes := ParseAnggaranEMON(rows)
 		return nodes, FormatEMON, nil
+	case FormatRKKS:
+		nodes := ParseAnggaranRKKS(rows)
+		return nodes, FormatRKKS, nil
 	case FormatFADetail:
 		csvBuf := rowsToCSV(rows)
 		nodes, err := ParseAnggaranCSVBatch(csvBuf)
@@ -76,6 +81,8 @@ func detectFormat(rows [][]string) AnggaranFormat {
 		}
 		joined := strings.ToUpper(strings.Join(row, " "))
 
+		slog.Info("detectFormat row", "row_index", i, "col_count", len(row), "joined", joined)
+
 		if strings.Contains(joined, "LAPORAN REALISASI") ||
 			strings.Contains(joined, "PER PROGRAM") ||
 			strings.Contains(joined, "16 SEGMEN") {
@@ -86,9 +93,14 @@ func detectFormat(rows [][]string) AnggaranFormat {
 			r0 := strings.TrimSpace(strings.ToUpper(safeGet(row, 0)))
 			r1 := strings.TrimSpace(strings.ToUpper(safeGet(row, 1)))
 			r2 := strings.TrimSpace(strings.ToUpper(safeGet(row, 2)))
+			r4 := strings.TrimSpace(strings.ToUpper(safeGet(row, 4)))
 
 			if r0 == "NO" && r1 == "KODE" && (strings.Contains(r2, "KEGIATAN") || strings.Contains(r2, "KRO")) {
 				return FormatEMON
+			}
+
+			if r0 == "KODE" && (strings.Contains(r1, "KEGIATAN") || strings.Contains(r1, "KRO") || strings.Contains(r1, "KOMPONEN") || r1 == "URAIAN") && r4 == "JUMLAH" {
+				return FormatRKKS
 			}
 		}
 	}
