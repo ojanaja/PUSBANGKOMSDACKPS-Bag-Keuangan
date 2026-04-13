@@ -29,6 +29,110 @@ func (q *Queries) CreateAnggaranSnapshot(ctx context.Context, snapshotPeriode st
 	return err
 }
 
+const deleteAnggaranSnapshot = `-- name: DeleteAnggaranSnapshot :exec
+DELETE FROM anggaran_history WHERE snapshot_periode = $1
+`
+
+func (q *Queries) DeleteAnggaranSnapshot(ctx context.Context, snapshotPeriode string) error {
+	_, err := q.db.Exec(ctx, deleteAnggaranSnapshot, snapshotPeriode)
+	return err
+}
+
+const getAvailableSnapshots = `-- name: GetAvailableSnapshots :many
+SELECT DISTINCT snapshot_periode
+FROM anggaran_history
+WHERE tahun_anggaran = $1
+ORDER BY snapshot_periode
+`
+
+func (q *Queries) GetAvailableSnapshots(ctx context.Context, tahunAnggaran pgtype.Int4) ([]string, error) {
+	rows, err := q.db.Query(ctx, getAvailableSnapshots, tahunAnggaran)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var snapshotPeriode string
+		if err := rows.Scan(&snapshotPeriode); err != nil {
+			return nil, err
+		}
+		items = append(items, snapshotPeriode)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAnggaranHistoryTree = `-- name: GetAnggaranHistoryTree :many
+WITH RECURSIVE tree AS (
+    SELECT
+        anggaran_node_id AS id, parent_id, jenis, kode, uraian, tahun_anggaran,
+        pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini,
+        realisasi_sd_periode, persentase_realisasi, sisa_anggaran,
+        1 AS level,
+        ARRAY[kode]::text[] AS path
+    FROM anggaran_history a
+    WHERE a.parent_id IS NULL AND a.tahun_anggaran = $1 AND a.snapshot_periode = $2
+
+    UNION ALL
+
+    SELECT
+        n.anggaran_node_id, n.parent_id, n.jenis, n.kode, n.uraian, n.tahun_anggaran,
+        n.pagu_revisi, n.lock_pagu, n.realisasi_periode_lalu, n.realisasi_periode_ini,
+        n.realisasi_sd_periode, n.persentase_realisasi, n.sisa_anggaran,
+        t.level + 1,
+        t.path || n.kode
+    FROM anggaran_history n
+    JOIN tree t ON n.parent_id = t.id
+    WHERE n.snapshot_periode = $2
+)
+SELECT id, parent_id, jenis, kode, uraian, tahun_anggaran, pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini, realisasi_sd_periode, persentase_realisasi, sisa_anggaran, level, path FROM tree
+ORDER BY path
+`
+
+type GetAnggaranHistoryTreeParams struct {
+	TahunAnggaran  pgtype.Int4 `json:"tahun_anggaran"`
+	SnapshotPeriode string     `json:"snapshot_periode"`
+}
+
+func (q *Queries) GetAnggaranHistoryTree(ctx context.Context, arg GetAnggaranHistoryTreeParams) ([]GetAnggaranTreeRow, error) {
+	rows, err := q.db.Query(ctx, getAnggaranHistoryTree, arg.TahunAnggaran, arg.SnapshotPeriode)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetAnggaranTreeRow
+	for rows.Next() {
+		var i GetAnggaranTreeRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ParentID,
+			&i.Jenis,
+			&i.Kode,
+			&i.Uraian,
+			&i.TahunAnggaran,
+			&i.PaguRevisi,
+			&i.LockPagu,
+			&i.RealisasiPeriodeLalu,
+			&i.RealisasiPeriodeIni,
+			&i.RealisasiSdPeriode,
+			&i.PersentaseRealisasi,
+			&i.SisaAnggaran,
+			&i.Level,
+			&i.Path,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getAnggaranDokumenByID = `-- name: GetAnggaranDokumenByID :one
 SELECT id, anggaran_node_id, file_hash_sha256, original_name, mime_type, file_size_bytes, uploaded_by, created_at FROM anggaran_dokumen_bukti
 WHERE id = $1

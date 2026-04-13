@@ -23,6 +23,9 @@ SET lock_pagu = $1
 WHERE id = $2
 RETURNING *;
 
+-- name: DeleteAnggaranSnapshot :exec
+DELETE FROM anggaran_history WHERE snapshot_periode = $1;
+
 -- name: CreateAnggaranSnapshot :exec
 INSERT INTO anggaran_history (
     id, anggaran_node_id, parent_id, jenis, kode, uraian, tahun_anggaran,
@@ -88,3 +91,35 @@ ORDER BY d.created_at DESC;
 -- name: GetAnggaranDokumenByID :one
 SELECT * FROM anggaran_dokumen_bukti
 WHERE id = $1;
+
+-- name: GetAvailableSnapshots :many
+SELECT DISTINCT snapshot_periode
+FROM anggaran_history
+WHERE tahun_anggaran = $1
+ORDER BY snapshot_periode;
+
+-- name: GetAnggaranHistoryTree :many
+WITH RECURSIVE tree AS (
+    SELECT
+        anggaran_node_id AS id, parent_id, jenis, kode, uraian, tahun_anggaran,
+        pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini,
+        realisasi_sd_periode, persentase_realisasi, sisa_anggaran,
+        1 AS level,
+        ARRAY[kode]::text[] AS path
+    FROM anggaran_history a
+    WHERE a.parent_id IS NULL AND a.tahun_anggaran = $1 AND a.snapshot_periode = $2
+
+    UNION ALL
+
+    SELECT
+        n.anggaran_node_id, n.parent_id, n.jenis, n.kode, n.uraian, n.tahun_anggaran,
+        n.pagu_revisi, n.lock_pagu, n.realisasi_periode_lalu, n.realisasi_periode_ini,
+        n.realisasi_sd_periode, n.persentase_realisasi, n.sisa_anggaran,
+        t.level + 1,
+        t.path || n.kode
+    FROM anggaran_history n
+    JOIN tree t ON n.parent_id = t.id
+    WHERE n.snapshot_periode = $2
+)
+SELECT * FROM tree
+ORDER BY path;

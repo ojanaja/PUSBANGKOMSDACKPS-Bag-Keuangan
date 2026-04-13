@@ -13,7 +13,7 @@ CREATE TABLE anggaran_history (
     realisasi_sd_periode DECIMAL(19, 4) DEFAULT 0,
     persentase_realisasi DECIMAL(5, 2) DEFAULT 0,
     sisa_anggaran DECIMAL(19, 4) DEFAULT 0,
-    snapshot_periode VARCHAR(7) NOT NULL, -- format YYYY-MM
+    snapshot_periode VARCHAR(20) NOT NULL, -- format YYYY-MM or YYYY-MM-Rev
     snapshot_created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
