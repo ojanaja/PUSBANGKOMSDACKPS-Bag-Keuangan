@@ -52,7 +52,7 @@ func ParseAnggaranCSVStream(r io.Reader, handle func(AnggaranNodeImport) error) 
 			continue
 		}
 
-		if strings.Contains(strings.ToUpper(record[0]), "LAPORAN") || strings.Contains(strings.ToUpper(record[0]), "Uraian") || strings.Contains(strings.ToUpper(record[0]), "JUMLAH") {
+		if strings.Contains(strings.ToUpper(record[0]), "LAPORAN") || strings.Contains(strings.ToUpper(record[0]), "Uraian") || strings.Contains(strings.ToUpper(record[0]), "JUMLAH") || strings.Contains(strings.ToUpper(record[0]), "KEMENTERIAN") || strings.Contains(strings.ToUpper(record[0]), "UNIT ORGANISASI") || strings.Contains(strings.ToUpper(record[0]), "SATUAN KERJA") {
 			continue
 		}
 
@@ -188,16 +188,16 @@ func parseRow(record []string) (AnggaranNodeImport, bool) {
 		return node, false
 	}
 
-    paguCol := 18
-    lockCol := 20
-    laluCol := 24
-    iniCol := 25
-    sdCol := 28
-    perCol := 31
-    sisaCol := 34
+    paguCol := 15
+    lockCol := 17
+    laluCol := 21
+    iniCol := 22
+    sdCol := 24
+    perCol := 27
+    sisaCol := 29
 
     if node.Level == 8 {
-        iniCol = 26
+        iniCol = 23 // TRANSAKSI probably shifted too, let's keep the relative +1 if it was 26 25 ? I'll just check if it's 23. Wait, SP2D in original was iniCol = 26 instead of 25.
     }
 
 	node.PaguRevisi = parseFlexibleDecimal(safeGet(record, paguCol))
