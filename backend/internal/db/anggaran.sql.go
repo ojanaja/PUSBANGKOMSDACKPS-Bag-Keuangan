@@ -15,12 +15,12 @@ const createAnggaranSnapshot = `-- name: CreateAnggaranSnapshot :exec
 INSERT INTO anggaran_history (
     id, anggaran_node_id, parent_id, jenis, kode, uraian, tahun_anggaran,
     pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini,
-    realisasi_sd_periode, persentase_realisasi, sisa_anggaran, snapshot_periode
+    realisasi_sd_periode, persentase_realisasi, sisa_anggaran, source, snapshot_periode
 )
 SELECT 
     gen_random_uuid(), id, parent_id, jenis, kode, uraian, tahun_anggaran,
     pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini,
-    realisasi_sd_periode, persentase_realisasi, sisa_anggaran, $1
+    realisasi_sd_periode, persentase_realisasi, sisa_anggaran, source, $1
 FROM anggaran_node
 `
 
@@ -36,101 +36,6 @@ DELETE FROM anggaran_history WHERE snapshot_periode = $1
 func (q *Queries) DeleteAnggaranSnapshot(ctx context.Context, snapshotPeriode string) error {
 	_, err := q.db.Exec(ctx, deleteAnggaranSnapshot, snapshotPeriode)
 	return err
-}
-
-const getAvailableSnapshots = `-- name: GetAvailableSnapshots :many
-SELECT DISTINCT snapshot_periode
-FROM anggaran_history
-WHERE tahun_anggaran = $1
-ORDER BY snapshot_periode
-`
-
-func (q *Queries) GetAvailableSnapshots(ctx context.Context, tahunAnggaran pgtype.Int4) ([]string, error) {
-	rows, err := q.db.Query(ctx, getAvailableSnapshots, tahunAnggaran)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []string
-	for rows.Next() {
-		var snapshotPeriode string
-		if err := rows.Scan(&snapshotPeriode); err != nil {
-			return nil, err
-		}
-		items = append(items, snapshotPeriode)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getAnggaranHistoryTree = `-- name: GetAnggaranHistoryTree :many
-WITH RECURSIVE tree AS (
-    SELECT
-        anggaran_node_id AS id, parent_id, jenis, kode, uraian, tahun_anggaran,
-        pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini,
-        realisasi_sd_periode, persentase_realisasi, sisa_anggaran,
-        1 AS level,
-        ARRAY[kode]::text[] AS path
-    FROM anggaran_history a
-    WHERE a.parent_id IS NULL AND a.tahun_anggaran = $1 AND a.snapshot_periode = $2
-
-    UNION ALL
-
-    SELECT
-        n.anggaran_node_id, n.parent_id, n.jenis, n.kode, n.uraian, n.tahun_anggaran,
-        n.pagu_revisi, n.lock_pagu, n.realisasi_periode_lalu, n.realisasi_periode_ini,
-        n.realisasi_sd_periode, n.persentase_realisasi, n.sisa_anggaran,
-        t.level + 1,
-        t.path || n.kode
-    FROM anggaran_history n
-    JOIN tree t ON n.parent_id = t.id
-    WHERE n.snapshot_periode = $2
-)
-SELECT id, parent_id, jenis, kode, uraian, tahun_anggaran, pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini, realisasi_sd_periode, persentase_realisasi, sisa_anggaran, level, path FROM tree
-ORDER BY path
-`
-
-type GetAnggaranHistoryTreeParams struct {
-	TahunAnggaran  pgtype.Int4 `json:"tahun_anggaran"`
-	SnapshotPeriode string     `json:"snapshot_periode"`
-}
-
-func (q *Queries) GetAnggaranHistoryTree(ctx context.Context, arg GetAnggaranHistoryTreeParams) ([]GetAnggaranTreeRow, error) {
-	rows, err := q.db.Query(ctx, getAnggaranHistoryTree, arg.TahunAnggaran, arg.SnapshotPeriode)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetAnggaranTreeRow
-	for rows.Next() {
-		var i GetAnggaranTreeRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.ParentID,
-			&i.Jenis,
-			&i.Kode,
-			&i.Uraian,
-			&i.TahunAnggaran,
-			&i.PaguRevisi,
-			&i.LockPagu,
-			&i.RealisasiPeriodeLalu,
-			&i.RealisasiPeriodeIni,
-			&i.RealisasiSdPeriode,
-			&i.PersentaseRealisasi,
-			&i.SisaAnggaran,
-			&i.Level,
-			&i.Path,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const getAnggaranDokumenByID = `-- name: GetAnggaranDokumenByID :one
@@ -207,31 +112,126 @@ func (q *Queries) GetAnggaranDokumenByNode(ctx context.Context, anggaranNodeID p
 	return items, nil
 }
 
+const getAnggaranHistoryTree = `-- name: GetAnggaranHistoryTree :many
+WITH RECURSIVE tree AS (
+    SELECT
+        anggaran_node_id AS id, parent_id, jenis, kode, uraian, tahun_anggaran,
+        pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini,
+        realisasi_sd_periode, persentase_realisasi, sisa_anggaran, source,
+        1 AS level,
+        ARRAY[kode]::text[] AS path
+    FROM anggaran_history a
+    WHERE a.parent_id IS NULL AND a.tahun_anggaran = $1 AND a.snapshot_periode = $2 AND a.source = ANY(string_to_array($3::text, ','))
+
+    UNION ALL
+
+    SELECT
+        n.anggaran_node_id, n.parent_id, n.jenis, n.kode, n.uraian, n.tahun_anggaran,
+        n.pagu_revisi, n.lock_pagu, n.realisasi_periode_lalu, n.realisasi_periode_ini,
+        n.realisasi_sd_periode, n.persentase_realisasi, n.sisa_anggaran, n.source,
+        t.level + 1,
+        t.path || n.kode
+    FROM anggaran_history n
+    JOIN tree t ON n.parent_id = t.id
+    WHERE n.snapshot_periode = $2 AND n.source = ANY(string_to_array($3::text, ','))
+)
+SELECT id, parent_id, jenis, kode, uraian, tahun_anggaran, pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini, realisasi_sd_periode, persentase_realisasi, sisa_anggaran, source, level, path FROM tree
+ORDER BY path
+`
+
+type GetAnggaranHistoryTreeParams struct {
+	TahunAnggaran   pgtype.Int4 `json:"tahun_anggaran"`
+	SnapshotPeriode string      `json:"snapshot_periode"`
+	Column3         string      `json:"column_3"`
+}
+
+type GetAnggaranHistoryTreeRow struct {
+	ID                   pgtype.UUID    `json:"id"`
+	ParentID             pgtype.UUID    `json:"parent_id"`
+	Jenis                string         `json:"jenis"`
+	Kode                 string         `json:"kode"`
+	Uraian               string         `json:"uraian"`
+	TahunAnggaran        pgtype.Int4    `json:"tahun_anggaran"`
+	PaguRevisi           pgtype.Numeric `json:"pagu_revisi"`
+	LockPagu             pgtype.Numeric `json:"lock_pagu"`
+	RealisasiPeriodeLalu pgtype.Numeric `json:"realisasi_periode_lalu"`
+	RealisasiPeriodeIni  pgtype.Numeric `json:"realisasi_periode_ini"`
+	RealisasiSdPeriode   pgtype.Numeric `json:"realisasi_sd_periode"`
+	PersentaseRealisasi  pgtype.Numeric `json:"persentase_realisasi"`
+	SisaAnggaran         pgtype.Numeric `json:"sisa_anggaran"`
+	Source               pgtype.Text    `json:"source"`
+	Level                int32          `json:"level"`
+	Path                 []string       `json:"path"`
+}
+
+func (q *Queries) GetAnggaranHistoryTree(ctx context.Context, arg GetAnggaranHistoryTreeParams) ([]GetAnggaranHistoryTreeRow, error) {
+	rows, err := q.db.Query(ctx, getAnggaranHistoryTree, arg.TahunAnggaran, arg.SnapshotPeriode, arg.Column3)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetAnggaranHistoryTreeRow
+	for rows.Next() {
+		var i GetAnggaranHistoryTreeRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ParentID,
+			&i.Jenis,
+			&i.Kode,
+			&i.Uraian,
+			&i.TahunAnggaran,
+			&i.PaguRevisi,
+			&i.LockPagu,
+			&i.RealisasiPeriodeLalu,
+			&i.RealisasiPeriodeIni,
+			&i.RealisasiSdPeriode,
+			&i.PersentaseRealisasi,
+			&i.SisaAnggaran,
+			&i.Source,
+			&i.Level,
+			&i.Path,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getAnggaranTree = `-- name: GetAnggaranTree :many
 WITH RECURSIVE tree AS (
     SELECT 
         id, parent_id, jenis, kode, uraian, tahun_anggaran,
         pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini,
-        realisasi_sd_periode, persentase_realisasi, sisa_anggaran,
+        realisasi_sd_periode, persentase_realisasi, sisa_anggaran, source,
         1 AS level,
         ARRAY[kode]::text[] AS path
     FROM anggaran_node a
-    WHERE a.parent_id IS NULL AND a.tahun_anggaran = $1
+    WHERE a.parent_id IS NULL AND a.tahun_anggaran = $1 AND a.source = ANY(string_to_array($2::text, ','))
 
     UNION ALL
 
     SELECT 
         n.id, n.parent_id, n.jenis, n.kode, n.uraian, n.tahun_anggaran,
         n.pagu_revisi, n.lock_pagu, n.realisasi_periode_lalu, n.realisasi_periode_ini,
-        n.realisasi_sd_periode, n.persentase_realisasi, n.sisa_anggaran,
+        n.realisasi_sd_periode, n.persentase_realisasi, n.sisa_anggaran, n.source,
         t.level + 1,
         t.path || n.kode
     FROM anggaran_node n
     JOIN tree t ON n.parent_id = t.id
+    WHERE n.source = ANY(string_to_array($2::text, ','))
 )
-SELECT id, parent_id, jenis, kode, uraian, tahun_anggaran, pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini, realisasi_sd_periode, persentase_realisasi, sisa_anggaran, level, path FROM tree
+SELECT id, parent_id, jenis, kode, uraian, tahun_anggaran, pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini, realisasi_sd_periode, persentase_realisasi, sisa_anggaran, source, level, path FROM tree
 ORDER BY path
 `
+
+type GetAnggaranTreeParams struct {
+	TahunAnggaran pgtype.Int4 `json:"tahun_anggaran"`
+	Column2       string      `json:"column_2"`
+}
 
 type GetAnggaranTreeRow struct {
 	ID                   pgtype.UUID    `json:"id"`
@@ -247,12 +247,13 @@ type GetAnggaranTreeRow struct {
 	RealisasiSdPeriode   pgtype.Numeric `json:"realisasi_sd_periode"`
 	PersentaseRealisasi  pgtype.Numeric `json:"persentase_realisasi"`
 	SisaAnggaran         pgtype.Numeric `json:"sisa_anggaran"`
+	Source               pgtype.Text    `json:"source"`
 	Level                int32          `json:"level"`
 	Path                 []string       `json:"path"`
 }
 
-func (q *Queries) GetAnggaranTree(ctx context.Context, tahunAnggaran pgtype.Int4) ([]GetAnggaranTreeRow, error) {
-	rows, err := q.db.Query(ctx, getAnggaranTree, tahunAnggaran)
+func (q *Queries) GetAnggaranTree(ctx context.Context, arg GetAnggaranTreeParams) ([]GetAnggaranTreeRow, error) {
+	rows, err := q.db.Query(ctx, getAnggaranTree, arg.TahunAnggaran, arg.Column2)
 	if err != nil {
 		return nil, err
 	}
@@ -274,12 +275,40 @@ func (q *Queries) GetAnggaranTree(ctx context.Context, tahunAnggaran pgtype.Int4
 			&i.RealisasiSdPeriode,
 			&i.PersentaseRealisasi,
 			&i.SisaAnggaran,
+			&i.Source,
 			&i.Level,
 			&i.Path,
 		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAvailableSnapshots = `-- name: GetAvailableSnapshots :many
+SELECT DISTINCT snapshot_periode
+FROM anggaran_history
+WHERE tahun_anggaran = $1
+ORDER BY snapshot_periode
+`
+
+func (q *Queries) GetAvailableSnapshots(ctx context.Context, tahunAnggaran pgtype.Int4) ([]string, error) {
+	rows, err := q.db.Query(ctx, getAvailableSnapshots, tahunAnggaran)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var snapshot_periode string
+		if err := rows.Scan(&snapshot_periode); err != nil {
+			return nil, err
+		}
+		items = append(items, snapshot_periode)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -411,7 +440,7 @@ const updateLockPagu = `-- name: UpdateLockPagu :one
 UPDATE anggaran_node
 SET lock_pagu = $1
 WHERE id = $2
-RETURNING id, parent_id, jenis, kode, uraian, tahun_anggaran, pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini, realisasi_sd_periode, persentase_realisasi, sisa_anggaran
+RETURNING id, parent_id, jenis, kode, uraian, tahun_anggaran, pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini, realisasi_sd_periode, persentase_realisasi, sisa_anggaran, source
 `
 
 type UpdateLockPaguParams struct {
@@ -436,6 +465,7 @@ func (q *Queries) UpdateLockPagu(ctx context.Context, arg UpdateLockPaguParams) 
 		&i.RealisasiSdPeriode,
 		&i.PersentaseRealisasi,
 		&i.SisaAnggaran,
+		&i.Source,
 	)
 	return i, err
 }
@@ -444,11 +474,11 @@ const upsertAnggaranNode = `-- name: UpsertAnggaranNode :one
 INSERT INTO anggaran_node (
     id, parent_id, jenis, kode, uraian, tahun_anggaran,
     pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini, 
-    realisasi_sd_periode, persentase_realisasi, sisa_anggaran
+    realisasi_sd_periode, persentase_realisasi, sisa_anggaran, source
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
 )
-ON CONFLICT (id) DO UPDATE SET
+ON CONFLICT (COALESCE(parent_id, '00000000-0000-0000-0000-000000000000'::uuid), kode, source) DO UPDATE SET
     uraian = EXCLUDED.uraian,
     pagu_revisi = EXCLUDED.pagu_revisi,
     lock_pagu = EXCLUDED.lock_pagu,
@@ -457,7 +487,7 @@ ON CONFLICT (id) DO UPDATE SET
     realisasi_sd_periode = EXCLUDED.realisasi_sd_periode,
     persentase_realisasi = EXCLUDED.persentase_realisasi,
     sisa_anggaran = EXCLUDED.sisa_anggaran
-RETURNING id, parent_id, jenis, kode, uraian, tahun_anggaran, pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini, realisasi_sd_periode, persentase_realisasi, sisa_anggaran
+RETURNING id, parent_id, jenis, kode, uraian, tahun_anggaran, pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini, realisasi_sd_periode, persentase_realisasi, sisa_anggaran, source
 `
 
 type UpsertAnggaranNodeParams struct {
@@ -474,6 +504,7 @@ type UpsertAnggaranNodeParams struct {
 	RealisasiSdPeriode   pgtype.Numeric `json:"realisasi_sd_periode"`
 	PersentaseRealisasi  pgtype.Numeric `json:"persentase_realisasi"`
 	SisaAnggaran         pgtype.Numeric `json:"sisa_anggaran"`
+	Source               pgtype.Text    `json:"source"`
 }
 
 func (q *Queries) UpsertAnggaranNode(ctx context.Context, arg UpsertAnggaranNodeParams) (AnggaranNode, error) {
@@ -491,6 +522,7 @@ func (q *Queries) UpsertAnggaranNode(ctx context.Context, arg UpsertAnggaranNode
 		arg.RealisasiSdPeriode,
 		arg.PersentaseRealisasi,
 		arg.SisaAnggaran,
+		arg.Source,
 	)
 	var i AnggaranNode
 	err := row.Scan(
@@ -507,6 +539,7 @@ func (q *Queries) UpsertAnggaranNode(ctx context.Context, arg UpsertAnggaranNode
 		&i.RealisasiSdPeriode,
 		&i.PersentaseRealisasi,
 		&i.SisaAnggaran,
+		&i.Source,
 	)
 	return i, err
 }

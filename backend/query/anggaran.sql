@@ -2,11 +2,11 @@
 INSERT INTO anggaran_node (
     id, parent_id, jenis, kode, uraian, tahun_anggaran,
     pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini, 
-    realisasi_sd_periode, persentase_realisasi, sisa_anggaran
+    realisasi_sd_periode, persentase_realisasi, sisa_anggaran, source
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
 )
-ON CONFLICT (id) DO UPDATE SET
+ON CONFLICT (COALESCE(parent_id, '00000000-0000-0000-0000-000000000000'::uuid), kode, source) DO UPDATE SET
     uraian = EXCLUDED.uraian,
     pagu_revisi = EXCLUDED.pagu_revisi,
     lock_pagu = EXCLUDED.lock_pagu,
@@ -30,12 +30,12 @@ DELETE FROM anggaran_history WHERE snapshot_periode = $1;
 INSERT INTO anggaran_history (
     id, anggaran_node_id, parent_id, jenis, kode, uraian, tahun_anggaran,
     pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini,
-    realisasi_sd_periode, persentase_realisasi, sisa_anggaran, snapshot_periode
+    realisasi_sd_periode, persentase_realisasi, sisa_anggaran, source, snapshot_periode
 )
 SELECT 
     gen_random_uuid(), id, parent_id, jenis, kode, uraian, tahun_anggaran,
     pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini,
-    realisasi_sd_periode, persentase_realisasi, sisa_anggaran, $1
+    realisasi_sd_periode, persentase_realisasi, sisa_anggaran, source, $1
 FROM anggaran_node;
 
 -- name: GetAnggaranTree :many
@@ -43,22 +43,23 @@ WITH RECURSIVE tree AS (
     SELECT 
         id, parent_id, jenis, kode, uraian, tahun_anggaran,
         pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini,
-        realisasi_sd_periode, persentase_realisasi, sisa_anggaran,
+        realisasi_sd_periode, persentase_realisasi, sisa_anggaran, source,
         1 AS level,
         ARRAY[kode]::text[] AS path
     FROM anggaran_node a
-    WHERE a.parent_id IS NULL AND a.tahun_anggaran = $1
+    WHERE a.parent_id IS NULL AND a.tahun_anggaran = $1 AND a.source = ANY(string_to_array($2::text, ','))
 
     UNION ALL
 
     SELECT 
         n.id, n.parent_id, n.jenis, n.kode, n.uraian, n.tahun_anggaran,
         n.pagu_revisi, n.lock_pagu, n.realisasi_periode_lalu, n.realisasi_periode_ini,
-        n.realisasi_sd_periode, n.persentase_realisasi, n.sisa_anggaran,
+        n.realisasi_sd_periode, n.persentase_realisasi, n.sisa_anggaran, n.source,
         t.level + 1,
         t.path || n.kode
     FROM anggaran_node n
     JOIN tree t ON n.parent_id = t.id
+    WHERE n.source = ANY(string_to_array($2::text, ','))
 )
 SELECT * FROM tree
 ORDER BY path;
@@ -103,23 +104,23 @@ WITH RECURSIVE tree AS (
     SELECT
         anggaran_node_id AS id, parent_id, jenis, kode, uraian, tahun_anggaran,
         pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini,
-        realisasi_sd_periode, persentase_realisasi, sisa_anggaran,
+        realisasi_sd_periode, persentase_realisasi, sisa_anggaran, source,
         1 AS level,
         ARRAY[kode]::text[] AS path
     FROM anggaran_history a
-    WHERE a.parent_id IS NULL AND a.tahun_anggaran = $1 AND a.snapshot_periode = $2
+    WHERE a.parent_id IS NULL AND a.tahun_anggaran = $1 AND a.snapshot_periode = $2 AND a.source = ANY(string_to_array($3::text, ','))
 
     UNION ALL
 
     SELECT
         n.anggaran_node_id, n.parent_id, n.jenis, n.kode, n.uraian, n.tahun_anggaran,
         n.pagu_revisi, n.lock_pagu, n.realisasi_periode_lalu, n.realisasi_periode_ini,
-        n.realisasi_sd_periode, n.persentase_realisasi, n.sisa_anggaran,
+        n.realisasi_sd_periode, n.persentase_realisasi, n.sisa_anggaran, n.source,
         t.level + 1,
         t.path || n.kode
     FROM anggaran_history n
     JOIN tree t ON n.parent_id = t.id
-    WHERE n.snapshot_periode = $2
+    WHERE n.snapshot_periode = $2 AND n.source = ANY(string_to_array($3::text, ','))
 )
 SELECT * FROM tree
 ORDER BY path;

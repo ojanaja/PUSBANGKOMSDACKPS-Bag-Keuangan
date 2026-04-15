@@ -48,6 +48,7 @@ type AnggaranHistory struct {
 	SisaAnggaran         pgtype.Numeric     `json:"sisa_anggaran"`
 	SnapshotPeriode      string             `json:"snapshot_periode"`
 	SnapshotCreatedAt    pgtype.Timestamptz `json:"snapshot_created_at"`
+	Source               pgtype.Text        `json:"source"`
 }
 
 type AnggaranNode struct {
@@ -64,6 +65,7 @@ type AnggaranNode struct {
 	RealisasiSdPeriode   pgtype.Numeric `json:"realisasi_sd_periode"`
 	PersentaseRealisasi  pgtype.Numeric `json:"persentase_realisasi"`
 	SisaAnggaran         pgtype.Numeric `json:"sisa_anggaran"`
+	Source               pgtype.Text    `json:"source"`
 }
 
 type DokumenBukti struct {
