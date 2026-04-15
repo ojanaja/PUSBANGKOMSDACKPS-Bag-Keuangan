@@ -31,12 +31,12 @@ func ParseAnggaranCSVStream(r io.Reader, handle func(AnggaranNodeImport) error) 
 	reader.TrimLeadingSpace = true
 	reader.LazyQuotes = true
 	reader.Comma = ';'
-	reader.FieldsPerRecord = -1 
+	reader.FieldsPerRecord = -1
 
 	count := 0
 	lineNum := 0
-    
-    var lastNodeAtLevel [10]AnggaranNodeImport 
+
+	var lastNodeAtLevel [10]AnggaranNodeImport
 
 	for {
 		record, err := reader.Read()
@@ -61,23 +61,23 @@ func ParseAnggaranCSVStream(r io.Reader, handle func(AnggaranNodeImport) error) 
 			continue
 		}
 
-        parentLevel := -1
-        for i := node.Level - 1; i >= 0; i-- {
-            if lastNodeAtLevel[i].Kode != "" {
-                parentLevel = i
-                break
-            }
-        }
-        node.ParentLevel = parentLevel
+		parentLevel := -1
+		for i := node.Level - 1; i >= 0; i-- {
+			if lastNodeAtLevel[i].Kode != "" {
+				parentLevel = i
+				break
+			}
+		}
+		node.ParentLevel = parentLevel
 
 		if err := handle(node); err != nil {
 			return count, fmt.Errorf("error handling CSV line %d: %w", lineNum, err)
 		}
-        
-        lastNodeAtLevel[node.Level] = node
-        for i := node.Level + 1; i < 10; i++ {
-            lastNodeAtLevel[i] = AnggaranNodeImport{}
-        }
+
+		lastNodeAtLevel[node.Level] = node
+		for i := node.Level + 1; i < 10; i++ {
+			lastNodeAtLevel[i] = AnggaranNodeImport{}
+		}
 
 		count++
 	}
@@ -109,22 +109,24 @@ func parseRow(record []string) (AnggaranNodeImport, bool) {
 	col7 := strings.TrimSpace(safeGet(record, 7))
 	col14 := strings.TrimSpace(safeGet(record, 14))
 
-    col11 := strings.TrimSpace(safeGet(record, 11))
-    col12 := strings.TrimSpace(safeGet(record, 12))
-    dateRegex := regexp.MustCompile(`^\d{2}-\d{2}-\d{4}$`)
-    
-    if dateRegex.MatchString(col1) && (col11 != "" || col12 != "") {
-        node.Level = 8
-        node.Jenis = "TRANSAKSI"
-        sp2d := col11
-        if sp2d == "" { sp2d = col12 }
-        node.Kode = col1 + " | " + sp2d
-        node.Uraian = strings.TrimSpace(safeGet(record, 17))
-        if node.Uraian == "" {
-            node.Uraian = strings.TrimSpace(safeGet(record, 16))
-        }
-        isRelevant = true
-    } else if col1 != "" {
+	col11 := strings.TrimSpace(safeGet(record, 11))
+	col12 := strings.TrimSpace(safeGet(record, 12))
+	dateRegex := regexp.MustCompile(`^\d{2}-\d{2}-\d{4}$`)
+
+	if dateRegex.MatchString(col1) && (col11 != "" || col12 != "") {
+		node.Level = 8
+		node.Jenis = "TRANSAKSI"
+		sp2d := col11
+		if sp2d == "" {
+			sp2d = col12
+		}
+		node.Kode = col1 + " | " + sp2d
+		node.Uraian = strings.TrimSpace(safeGet(record, 17))
+		if node.Uraian == "" {
+			node.Uraian = strings.TrimSpace(safeGet(record, 16))
+		}
+		isRelevant = true
+	} else if col1 != "" {
 		if !strings.Contains(col1, ".") {
 			node.Level = 0
 			node.Jenis = "PROGRAM"
@@ -188,17 +190,17 @@ func parseRow(record []string) (AnggaranNodeImport, bool) {
 		return node, false
 	}
 
-    paguCol := 15
-    lockCol := 17
-    laluCol := 21
-    iniCol := 22
-    sdCol := 24
-    perCol := 27
-    sisaCol := 29
+	paguCol := 15
+	lockCol := 17
+	laluCol := 21
+	iniCol := 22
+	sdCol := 24
+	perCol := 27
+	sisaCol := 29
 
-    if node.Level == 8 {
-        iniCol = 23 // TRANSAKSI probably shifted too, let's keep the relative +1 if it was 26 25 ? I'll just check if it's 23. Wait, SP2D in original was iniCol = 26 instead of 25.
-    }
+	if node.Level == 8 {
+		iniCol = 23 // TRANSAKSI probably shifted too, let's keep the relative +1 if it was 26 25 ? I'll just check if it's 23. Wait, SP2D in original was iniCol = 26 instead of 25.
+	}
 
 	node.PaguRevisi = parseFlexibleDecimal(safeGet(record, paguCol))
 	node.LockPagu = parseFlexibleDecimal(safeGet(record, lockCol))
@@ -259,6 +261,6 @@ func parseFlexibleDecimal(raw string) string {
 }
 
 func parseFlexiblePercent(raw string) string {
-    val := parseFlexibleDecimal(raw)
-    return val
+	val := parseFlexibleDecimal(raw)
+	return val
 }
