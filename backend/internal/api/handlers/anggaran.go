@@ -56,29 +56,34 @@ func (h *Handler) ImportAnggaranData(ctx echo.Context) error {
 	if _, err := tx.Exec(reqCtx, `
 		-- Removing redundant temp table logic as we will perform upserts natively
 	`); err != nil {
-	    // ignore	
+		// ignore
 	}
 
 	nodeCount := 0
 	var parentIDs [10]pgtype.UUID
 
 	_, err = services.ParseAnggaranCSVStream(src, func(node services.AnggaranNodeImport) error {
-        
-        parentID := pgtype.UUID{Valid: false}
-        if node.ParentLevel >= 0 {
-            parentID = parentIDs[node.ParentLevel]
-        }
 
-        var insertedID pgtype.UUID
-        err := tx.QueryRow(reqCtx, `
+		parentID := pgtype.UUID{Valid: false}
+		if node.ParentLevel >= 0 {
+			parentID = parentIDs[node.ParentLevel]
+		}
+
+		source := ctx.FormValue("source")
+		if source == "" {
+			source = "fa_detail"
+		}
+
+		var insertedID pgtype.UUID
+		err := tx.QueryRow(reqCtx, `
             INSERT INTO anggaran_node (
                 id, parent_id, jenis, kode, uraian, tahun_anggaran, 
                 pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini, 
-                realisasi_sd_periode, persentase_realisasi, sisa_anggaran
+                realisasi_sd_periode, persentase_realisasi, sisa_anggaran, source
             ) VALUES (
-                gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+                gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
             )
-            ON CONFLICT (COALESCE(parent_id, '00000000-0000-0000-0000-000000000000'::uuid), kode) DO UPDATE SET
+            ON CONFLICT (COALESCE(parent_id, '00000000-0000-0000-0000-000000000000'::uuid), kode, source) DO UPDATE SET
                 uraian = EXCLUDED.uraian,
                 pagu_revisi = EXCLUDED.pagu_revisi,
                 lock_pagu = EXCLUDED.lock_pagu,
@@ -88,20 +93,20 @@ func (h *Handler) ImportAnggaranData(ctx echo.Context) error {
                 persentase_realisasi = EXCLUDED.persentase_realisasi,
                 sisa_anggaran = EXCLUDED.sisa_anggaran
             RETURNING id;
-        `, 
-            parentID, node.Jenis, node.Kode, node.Uraian, tahun,
-            mustDecimalNumeric(node.PaguRevisi), mustDecimalNumeric(node.LockPagu),
-            mustDecimalNumeric(node.RealisasiLalu), mustDecimalNumeric(node.RealisasiIni),
-            mustDecimalNumeric(node.RealisasiSD), mustDecimalNumeric(node.Persentase),
-            mustDecimalNumeric(node.Sisa),
-        ).Scan(&insertedID)
+        `,
+			parentID, node.Jenis, node.Kode, node.Uraian, tahun,
+			mustDecimalNumeric(node.PaguRevisi), mustDecimalNumeric(node.LockPagu),
+			mustDecimalNumeric(node.RealisasiLalu), mustDecimalNumeric(node.RealisasiIni),
+			mustDecimalNumeric(node.RealisasiSD), mustDecimalNumeric(node.Persentase),
+			mustDecimalNumeric(node.Sisa), source,
+		).Scan(&insertedID)
 
-        if err != nil {
-            slog.Error("upsert node failed", "error", err, "kode", node.Kode)
-            return err
-        }
+		if err != nil {
+			slog.Error("upsert node failed", "error", err, "kode", node.Kode)
+			return err
+		}
 
-        parentIDs[node.Level] = insertedID
+		parentIDs[node.Level] = insertedID
 		nodeCount++
 		return nil
 	})
@@ -118,7 +123,6 @@ func (h *Handler) ImportAnggaranData(ctx echo.Context) error {
 		"nodes_upserted": nodeCount,
 	})
 }
-
 
 // PreviewAnggaranImport parses an Excel file and returns the tree preview without saving to DB.
 func (h *Handler) PreviewAnggaranImport(ctx echo.Context) error {
@@ -153,14 +157,14 @@ func (h *Handler) PreviewAnggaranImport(ctx echo.Context) error {
 
 	// Build preview response with temp IDs
 	type PreviewNode struct {
-		TempID       string `json:"temp_id"`
-		ParentTempID string `json:"parent_temp_id"`
-		Level        int    `json:"level"`
-		Jenis        string `json:"jenis"`
-		Kode         string `json:"kode"`
-		Uraian       string `json:"uraian"`
-		PaguRevisi   string `json:"pagu_revisi"`
-		LockPagu     string `json:"lock_pagu"`
+		TempID        string `json:"temp_id"`
+		ParentTempID  string `json:"parent_temp_id"`
+		Level         int    `json:"level"`
+		Jenis         string `json:"jenis"`
+		Kode          string `json:"kode"`
+		Uraian        string `json:"uraian"`
+		PaguRevisi    string `json:"pagu_revisi"`
+		LockPagu      string `json:"lock_pagu"`
 		RealisasiLalu string `json:"realisasi_lalu"`
 		RealisasiIni  string `json:"realisasi_ini"`
 		RealisasiSD   string `json:"realisasi_sd"`
@@ -236,9 +240,9 @@ func (h *Handler) ConfirmAnggaranImport(ctx echo.Context) error {
 
 	type ConfirmPayload struct {
 		TahunAnggaran int           `json:"tahun_anggaran"`
+		Source        string        `json:"source"`
 		Nodes         []ConfirmNode `json:"nodes"`
 	}
-
 	var payload ConfirmPayload
 	if err := json.NewDecoder(ctx.Request().Body).Decode(&payload); err != nil {
 		slog.Error("ConfirmAnggaranImport 400", "reason", "invalid JSON body", "error", err)
@@ -278,31 +282,36 @@ func (h *Handler) ConfirmAnggaranImport(ctx echo.Context) error {
 		}
 
 		var insertedID pgtype.UUID
+
+		source := "fa_detail"
+		if payload.Source != "" {
+			source = payload.Source
+		}
+
 		err := tx.QueryRow(reqCtx, `
-			INSERT INTO anggaran_node (
-				id, parent_id, jenis, kode, uraian, tahun_anggaran,
-				pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini,
-				realisasi_sd_periode, persentase_realisasi, sisa_anggaran
-			) VALUES (
-				gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
-			)
-			ON CONFLICT (COALESCE(parent_id, '00000000-0000-0000-0000-000000000000'::uuid), kode) DO UPDATE SET
-				uraian = EXCLUDED.uraian,
-				pagu_revisi = EXCLUDED.pagu_revisi,
-				lock_pagu = EXCLUDED.lock_pagu,
-				realisasi_periode_lalu = EXCLUDED.realisasi_periode_lalu,
-				realisasi_periode_ini = EXCLUDED.realisasi_periode_ini,
-				realisasi_sd_periode = EXCLUDED.realisasi_sd_periode,
-				persentase_realisasi = EXCLUDED.persentase_realisasi,
-				sisa_anggaran = EXCLUDED.sisa_anggaran
-			RETURNING id;
-		`,
+                        INSERT INTO anggaran_node (
+                                id, parent_id, jenis, kode, uraian, tahun_anggaran,
+                                pagu_revisi, lock_pagu, realisasi_periode_lalu, realisasi_periode_ini,
+                                realisasi_sd_periode, persentase_realisasi, sisa_anggaran, source
+                        ) VALUES (
+                                gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+                        )
+                        ON CONFLICT (COALESCE(parent_id, '00000000-0000-0000-0000-000000000000'::uuid), kode, source) DO UPDATE SET
+                                uraian = EXCLUDED.uraian,
+                                pagu_revisi = EXCLUDED.pagu_revisi,
+                                lock_pagu = EXCLUDED.lock_pagu,
+                                realisasi_periode_lalu = EXCLUDED.realisasi_periode_lalu,
+                                realisasi_periode_ini = EXCLUDED.realisasi_periode_ini,
+                                realisasi_sd_periode = EXCLUDED.realisasi_sd_periode,
+                                persentase_realisasi = EXCLUDED.persentase_realisasi,
+                                sisa_anggaran = EXCLUDED.sisa_anggaran
+                        RETURNING id;
+                `,
 			parentID, node.Jenis, node.Kode, node.Uraian, payload.TahunAnggaran,
 			mustDecimalNumeric(node.PaguRevisi), mustDecimalNumeric(node.LockPagu),
 			mustDecimalNumeric(node.RealisasiLalu), mustDecimalNumeric(node.RealisasiIni),
 			mustDecimalNumeric(node.RealisasiSD), mustDecimalNumeric(node.Persentase),
-			mustDecimalNumeric(node.Sisa),
-		).Scan(&insertedID)
+			mustDecimalNumeric(node.Sisa), source).Scan(&insertedID)
 
 		if err != nil {
 			slog.Error("upsert node failed", "error", err, "kode", node.Kode)
@@ -336,11 +345,17 @@ func mustDecimalNumeric(s string) pgtype.Numeric {
 func (h *Handler) GetAnggaranTree(ctx echo.Context, params GetAnggaranTreeParams) error {
 	tahun := pgtype.Int4{Int32: int32(params.Tahun), Valid: true}
 
+	sourceFilter := "fa_detail"
+	if params.Source != nil && *params.Source != "" {
+		sourceFilter = *params.Source
+	}
+
 	// If a snapshot periode is specified, fetch from history table
 	if params.Periode != nil && *params.Periode != "" {
 		rows, err := h.queries.GetAnggaranHistoryTree(ctx.Request().Context(), db.GetAnggaranHistoryTreeParams{
 			TahunAnggaran:   tahun,
 			SnapshotPeriode: *params.Periode,
+			Column3:         sourceFilter,
 		})
 		if err != nil {
 			slog.Error("GetAnggaranHistoryTree failed", "error", err)
@@ -350,7 +365,10 @@ func (h *Handler) GetAnggaranTree(ctx echo.Context, params GetAnggaranTreeParams
 	}
 
 	// Default: fetch live data
-	rows, err := h.queries.GetAnggaranTree(ctx.Request().Context(), tahun)
+	rows, err := h.queries.GetAnggaranTree(ctx.Request().Context(), db.GetAnggaranTreeParams{
+		TahunAnggaran: tahun,
+		Column2:       sourceFilter,
+	})
 	if err != nil {
 		slog.Error("GetAnggaranTree failed", "error", err)
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to retrieve Anggaran tree"})

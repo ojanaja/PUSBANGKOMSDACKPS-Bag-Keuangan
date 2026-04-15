@@ -10,6 +10,7 @@ import (
 )
 
 var nonNumericChars = regexp.MustCompile(`[^0-9,.-]`)
+var groupedThousandsComma = regexp.MustCompile(`^-?\d{1,3}(,\d{3})+$`)
 
 type AnggaranNodeImport struct {
 	Level         int
@@ -121,23 +122,20 @@ func parseRow(record []string) (AnggaranNodeImport, bool) {
 			sp2d = col12
 		}
 		node.Kode = col1 + " | " + sp2d
-		node.Uraian = strings.TrimSpace(safeGet(record, 17))
-		if node.Uraian == "" {
-			node.Uraian = strings.TrimSpace(safeGet(record, 16))
-		}
+		node.Uraian = firstNonEmpty(record, 17, 16)
 		isRelevant = true
 	} else if col1 != "" {
 		if !strings.Contains(col1, ".") {
 			node.Level = 0
 			node.Jenis = "PROGRAM"
 			node.Kode = col1
-			node.Uraian = strings.TrimSpace(safeGet(record, 3))
+			node.Uraian = firstNonEmpty(record, 3, 8, 6)
 			isRelevant = true
 		} else {
 			node.Level = 1
 			node.Jenis = "KEGIATAN"
 			node.Kode = col1
-			node.Uraian = strings.TrimSpace(safeGet(record, 7))
+			node.Uraian = firstNonEmpty(record, 8, 7, 6, 3)
 			isRelevant = true
 		}
 	} else if col2 != "" {
@@ -145,32 +143,32 @@ func parseRow(record []string) (AnggaranNodeImport, bool) {
 			node.Level = 2
 			node.Jenis = "OUTPUT_GROUP"
 			node.Kode = col2
-			node.Uraian = strings.TrimSpace(safeGet(record, 6))
+			node.Uraian = firstNonEmpty(record, 6, 8, 9)
 			isRelevant = true
 		} else {
 			node.Level = 3
 			node.Jenis = "OUTPUT"
 			node.Kode = col2
-			node.Uraian = strings.TrimSpace(safeGet(record, 8))
+			node.Uraian = firstNonEmpty(record, 10, 8, 9)
 			isRelevant = true
 		}
 	} else if col4 != "" {
 		node.Level = 4
 		node.Jenis = "SUBOUTPUT_GROUP"
 		node.Kode = col4
-		node.Uraian = strings.TrimSpace(safeGet(record, 9))
+		node.Uraian = firstNonEmpty(record, 9, 10, 11)
 		isRelevant = true
 	} else if col5 != "" {
 		node.Level = 5
 		node.Jenis = "SUBOUTPUT"
 		node.Kode = col5
-		node.Uraian = strings.TrimSpace(safeGet(record, 11))
+		node.Uraian = firstNonEmpty(record, 11, 10, 9)
 		isRelevant = true
 	} else if col7 != "" {
 		node.Level = 6
 		node.Jenis = "AKUN"
 		node.Kode = col7
-		node.Uraian = strings.TrimSpace(safeGet(record, 13))
+		node.Uraian = firstNonEmpty(record, 12, 13, 11)
 		isRelevant = true
 	} else if col14 != "" {
 		node.Level = 7
@@ -220,6 +218,16 @@ func safeGet(record []string, idx int) string {
 	return ""
 }
 
+func firstNonEmpty(record []string, candidates ...int) string {
+	for _, idx := range candidates {
+		v := strings.TrimSpace(safeGet(record, idx))
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 func parseFlexibleDecimal(raw string) string {
 	value := strings.TrimSpace(raw)
 	if value == "" || value == "-" {
@@ -239,7 +247,13 @@ func parseFlexibleDecimal(raw string) string {
 		value = strings.ReplaceAll(value, ".", "")
 		value = strings.ReplaceAll(value, ",", ".")
 	} else if strings.Contains(value, ",") && !strings.Contains(value, ".") {
-		value = strings.ReplaceAll(value, ",", ".")
+		// FA Detail monetary values commonly use comma as thousands separator,
+		// e.g. "552,780" should become "552780" not "552.780".
+		if groupedThousandsComma.MatchString(value) {
+			value = strings.ReplaceAll(value, ",", "")
+		} else {
+			value = strings.ReplaceAll(value, ",", ".")
+		}
 	}
 
 	if value == "" || value == "." || value == "-" || value == "-." {

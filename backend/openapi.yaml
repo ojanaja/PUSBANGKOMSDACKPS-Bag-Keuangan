@@ -250,6 +250,12 @@ paths:
           schema:
             type: string
           description: Snapshot periode string (e.g. 2026-04-Rev). If empty or omitted, returns current live data.
+        - name: source
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Comma-separated list of sources to filter (e.g. rkks,fa_detail,emon). If empty, returns fa_detail.
       responses:
         '200':
           description: Anggaran tree data

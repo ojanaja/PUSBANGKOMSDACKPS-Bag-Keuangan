@@ -218,15 +218,20 @@ type ImportAnggaranDataMultipartBody struct {
 	TahunAnggaran int                `json:"tahun_anggaran"`
 }
 
-// GetAnggaranTreeParams defines parameters for GetAnggaranTree.
-type GetAnggaranTreeParams struct {
-	Tahun   int     `form:"tahun" json:"tahun"`
-	Periode *string `form:"periode" json:"periode,omitempty"`
-}
-
 // GetAnggaranSnapshotsParams defines parameters for GetAnggaranSnapshots.
 type GetAnggaranSnapshotsParams struct {
 	Tahun int `form:"tahun" json:"tahun"`
+}
+
+// GetAnggaranTreeParams defines parameters for GetAnggaranTree.
+type GetAnggaranTreeParams struct {
+	Tahun int `form:"tahun" json:"tahun"`
+
+	// Periode Snapshot periode string (e.g. 2026-04-Rev). If empty or omitted, returns current live data.
+	Periode *string `form:"periode,omitempty" json:"periode,omitempty"`
+
+	// Source Comma-separated list of sources to filter (e.g. rkks,fa_detail,emon). If empty, returns fa_detail.
+	Source *string `form:"source,omitempty" json:"source,omitempty"`
 }
 
 // UploadBuktiAnggaranMultipartBody defines parameters for UploadBuktiAnggaran.
@@ -264,9 +269,11 @@ type ServerInterface interface {
 	// Create a snapshot of the current anggaran state
 	// (POST /anggaran/snapshot)
 	CreateAnggaranSnapshot(ctx echo.Context) error
+	// List available snapshot periods for a fiscal year
+	// (GET /anggaran/snapshots)
+	GetAnggaranSnapshots(ctx echo.Context, params GetAnggaranSnapshotsParams) error
 	// Get Anggaran hierarchy tree
 	// (GET /anggaran/tree)
-	GetAnggaranSnapshots(ctx echo.Context, params GetAnggaranSnapshotsParams) error
 	GetAnggaranTree(ctx echo.Context, params GetAnggaranTreeParams) error
 	// Upload a document as proof for an anggaran node
 	// (POST /anggaran/upload-bukti)
@@ -330,6 +337,26 @@ func (w *ServerInterfaceWrapper) CreateAnggaranSnapshot(ctx echo.Context) error 
 	return err
 }
 
+// GetAnggaranSnapshots converts echo context to params.
+func (w *ServerInterfaceWrapper) GetAnggaranSnapshots(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(CookieAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAnggaranSnapshotsParams
+	// ------------- Required query parameter "tahun" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "tahun", ctx.QueryParams(), &params.Tahun, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter tahun: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetAnggaranSnapshots(ctx, params)
+	return err
+}
+
 // GetAnggaranTree converts echo context to params.
 func (w *ServerInterfaceWrapper) GetAnggaranTree(ctx echo.Context) error {
 	var err error
@@ -346,29 +373,21 @@ func (w *ServerInterfaceWrapper) GetAnggaranTree(ctx echo.Context) error {
 	}
 
 	// ------------- Optional query parameter "periode" -------------
-	if periodeVal := ctx.QueryParam("periode"); periodeVal != "" {
-		params.Periode = &periodeVal
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "periode", ctx.QueryParams(), &params.Periode, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter periode: %s", err))
+	}
+
+	// ------------- Optional query parameter "source" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "source", ctx.QueryParams(), &params.Source, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter source: %s", err))
 	}
 
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.GetAnggaranTree(ctx, params)
-	return err
-}
-
-// GetAnggaranSnapshots converts echo context to params.
-func (w *ServerInterfaceWrapper) GetAnggaranSnapshots(ctx echo.Context) error {
-	var err error
-
-	ctx.Set(CookieAuthScopes, []string{})
-
-	var params GetAnggaranSnapshotsParams
-
-	err = runtime.BindQueryParameterWithOptions("form", true, true, "tahun", ctx.QueryParams(), &params.Tahun, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter tahun: %s", err))
-	}
-
-	err = w.Handler.GetAnggaranSnapshots(ctx, params)
 	return err
 }
 
@@ -561,6 +580,7 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 
 	router.POST(baseURL+"/anggaran/import", wrapper.ImportAnggaranData)
 	router.POST(baseURL+"/anggaran/snapshot", wrapper.CreateAnggaranSnapshot)
+	router.GET(baseURL+"/anggaran/snapshots", wrapper.GetAnggaranSnapshots)
 	router.GET(baseURL+"/anggaran/tree", wrapper.GetAnggaranTree)
 	router.POST(baseURL+"/anggaran/upload-bukti", wrapper.UploadBuktiAnggaran)
 	router.PUT(baseURL+"/anggaran/:id", wrapper.UpdateAnggaranNode)
@@ -579,35 +599,38 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"t4mk7ftTvJ6s/xsAAP//ifAnOccgAAA=",
+	"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",
+	"///d7cQ2piMAAA==",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
