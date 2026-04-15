@@ -151,6 +151,17 @@ export default function AnggaranPage() {
 
     // Find all revisions for the selected month
     const availableRevisions = snapshots.filter(s => s.startsWith(targetPeriodePrefix)).sort()
+    const suggestedNextRevisi = (() => {
+        const nums = availableRevisions
+            .map((rev) => {
+                const suffix = rev.split('-Rev')[1] ?? ''
+                const n = Number.parseInt(suffix, 10)
+                return Number.isFinite(n) ? n : null
+            })
+            .filter((n): n is number => n !== null)
+        const next = (nums.length > 0 ? Math.max(...nums) : 0) + 1
+        return String(next)
+    })()
 
     // Determine the actual derived periode
     let derivedPeriode: string | undefined;
@@ -165,7 +176,7 @@ export default function AnggaranPage() {
         }
     }
 
-    const { query, previewMutation, confirmImportMutation, updatePaguMutation, updateLockPaguMutation, uploadBuktiMutation, createSnapshotMutation } = useAnggaran(tahun, derivedPeriode)
+    const { query, previewMutation, confirmImportMutation, updatePaguMutation, updateLockPaguMutation, uploadBuktiMutation, createSnapshotMutation } = useAnggaran(tahun, derivedPeriode, 'fa_detail,emon')
     const { data: uploadDocuments = [], refetch: refetchDocuments, isLoading: loadingDocs } = useAnggaranDokumen(uploadTarget?.id || null)
 
     const tree = query.data || []
@@ -389,7 +400,16 @@ export default function AnggaranPage() {
             {showImportModal && (
                 <ImportPreviewModal
                     onClose={() => setShowImportModal(false)}
-                    onImported={(t) => { setTahun(t); setCurrentPathIds([]); setShowImportModal(false) }}
+                    onImported={({ tahun: importedTahun, bulan: importedBulan, periode }) => {
+                        setTahun(importedTahun)
+                        setBulan(importedBulan)
+                        setRevisi(periode)
+                        setCurrentPathIds([])
+                        setShowImportModal(false)
+                    }}
+                    initialTahun={tahun}
+                    initialBulan={bulan}
+                    initialRevisi={suggestedNextRevisi}
                     previewMutation={previewMutation}
                     confirmImportMutation={confirmImportMutation}
                     createSnapshotMutation={createSnapshotMutation}

@@ -106,6 +106,20 @@ export interface PreviewResult {
     }
 }
 
+function normalizeNodeByLock(node: PreviewNode): PreviewNode {
+    const lock = parseFloat(node.lock_pagu) || 0
+    const pagu = parseFloat(node.pagu_revisi) || 0
+    if (!(pagu > 0 && lock >= pagu)) return node
+    return {
+        ...node,
+        realisasi_lalu: '0',
+        realisasi_ini: '0',
+        realisasi_sd: '0',
+        persentase: '0',
+        sisa: node.pagu_revisi,
+    }
+}
+
 export function useAnggaranSnapshots(tahun: number) {
     return useQuery({
         queryKey: ['anggaran', 'snapshots', tahun],
@@ -116,14 +130,15 @@ export function useAnggaranSnapshots(tahun: number) {
     })
 }
 
-export function useAnggaran(tahun: number, periode?: string) {
+export function useAnggaran(tahun: number, periode?: string, source?: string) {
     const queryClient = useQueryClient()
 
     const query = useQuery({
-        queryKey: ['anggaran', tahun, periode || 'live'],
+        queryKey: ['anggaran', tahun, periode || 'live', source || 'default'],
         queryFn: async () => {
             const params = new URLSearchParams({ tahun: String(tahun) })
             if (periode) params.set('periode', periode)
+            if (source) params.set('source', source)
             const data = await apiGet<APIAnggaranNode[]>(`/anggaran/tree?${params}`)
             return buildTree(data || [])
         }
@@ -139,10 +154,12 @@ export function useAnggaran(tahun: number, periode?: string) {
     })
 
     const confirmImportMutation = useMutation({
-        mutationFn: async ({ tahun_anggaran, nodes }: { tahun_anggaran: number, nodes: PreviewNode[] }) => {
+        mutationFn: async ({ tahun_anggaran, nodes, format_detected }: { tahun_anggaran: number, nodes: PreviewNode[], format_detected?: PreviewResult['format_detected'] }) => {
+            const normalizedNodes = nodes.map(normalizeNodeByLock)
             return apiPost<{ nodes_upserted: number }>('/anggaran/confirm-import', {
                 tahun_anggaran,
-                nodes
+                source: format_detected,
+                nodes: normalizedNodes
             })
         },
         onSuccess: () => {
@@ -201,25 +218,25 @@ export function useAnggaran(tahun: number, periode?: string) {
 }
 
 export interface AnggaranDokumenItem {
-	id: string
-	anggaran_node_id: string
-	file_hash_sha256: string
-	original_name: string
-	mime_type: string
-	file_size_bytes: number
-	created_at: string
-	uploaded_by: string
-	uploaded_by_name: string
+    id: string
+    anggaran_node_id: string
+    file_hash_sha256: string
+    original_name: string
+    mime_type: string
+    file_size_bytes: number
+    created_at: string
+    uploaded_by: string
+    uploaded_by_name: string
 }
 
 export function useAnggaranDokumen(nodeId: string | null) {
-	return useQuery({
-		queryKey: ['anggaran', 'documents', nodeId],
-		queryFn: async () => {
-			if (!nodeId) return []
-			const data = await apiGet<AnggaranDokumenItem[]>(`/anggaran/${nodeId}/documents`)
-			return data || []
-		},
-		enabled: !!nodeId
-	})
+    return useQuery({
+        queryKey: ['anggaran', 'documents', nodeId],
+        queryFn: async () => {
+            if (!nodeId) return []
+            const data = await apiGet<AnggaranDokumenItem[]>(`/anggaran/${nodeId}/documents`)
+            return data || []
+        },
+        enabled: !!nodeId
+    })
 }

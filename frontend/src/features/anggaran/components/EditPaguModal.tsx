@@ -18,6 +18,9 @@ export default function EditPaguModal({ node, onClose, updatePaguMutation, updat
     const [realisasiIni, setRealisasiIni] = useState(node.realisasi_periode_ini.toString())
     const [error, setError] = useState<string | null>(null)
     const { showToast } = useToast()
+    const lockValue = parseFloat(lockPagu) || 0
+    const paguValue = parseFloat(paguRevisi) || 0
+    const lockActive = paguValue > 0 && lockValue >= paguValue
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -30,8 +33,8 @@ export default function EditPaguModal({ node, onClose, updatePaguMutation, updat
                     id: node.id,
                     data: {
                         pagu_revisi: paguRevisi,
-                        realisasi_periode_lalu: realisasiLalu,
-                        realisasi_periode_ini: realisasiIni
+                        realisasi_periode_lalu: lockActive ? '0' : realisasiLalu,
+                        realisasi_periode_ini: lockActive ? '0' : realisasiIni
                     }
                 }),
                 updateLockPaguMutation.mutateAsync({
@@ -87,9 +90,10 @@ export default function EditPaguModal({ node, onClose, updatePaguMutation, updat
                             <label className="block text-sm font-medium text-slate-700 mb-1.5">Realisasi Periode Lalu (Rp)</label>
                             <input
                                 type="number"
-                                value={realisasiLalu}
+                                value={lockActive ? '0' : realisasiLalu}
                                 onChange={e => setRealisasiLalu(e.target.value)}
-                                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-500"
+                                disabled={lockActive}
                                 required
                             />
                         </div>
@@ -97,12 +101,18 @@ export default function EditPaguModal({ node, onClose, updatePaguMutation, updat
                             <label className="block text-sm font-medium text-slate-700 mb-1.5">Realisasi Periode Ini (Rp)</label>
                             <input
                                 type="number"
-                                value={realisasiIni}
+                                value={lockActive ? '0' : realisasiIni}
                                 onChange={e => setRealisasiIni(e.target.value)}
-                                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-500"
+                                disabled={lockActive}
                                 required
                             />
                         </div>
+                        {lockActive && (
+                            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                                Lock pagu aktif. Realisasi wajib 0 sesuai aturan bisnis.
+                            </p>
+                        )}
                     </div>
 
                     {error && (

@@ -12,9 +12,12 @@ import { formatCurrency } from '@/lib/formatCurrency'
 
 interface ImportPreviewModalProps {
     onClose: () => void
-    onImported: (tahun: number) => void
+    onImported: (result: { tahun: number; bulan: number; periode: string }) => void
+    initialTahun?: number
+    initialBulan?: number
+    initialRevisi?: string
     previewMutation: UseMutationResult<PreviewResult, Error, { file: File }>
-    confirmImportMutation: UseMutationResult<{ nodes_upserted: number }, Error, { tahun_anggaran: number, nodes: PreviewNode[] }>
+    confirmImportMutation: UseMutationResult<{ nodes_upserted: number }, Error, { tahun_anggaran: number, nodes: PreviewNode[], format_detected?: PreviewResult['format_detected'] }>
     createSnapshotMutation: UseMutationResult<unknown, Error, { periode: string }>
 }
 
@@ -67,6 +70,24 @@ function buildPreviewTree(nodes: PreviewNode[]): TreePreviewNode[] {
     return roots
 }
 
+function isLockedByPagu(node: PreviewNode | TreePreviewNode): boolean {
+    const lock = parseFloat(node.lock_pagu) || 0
+    const pagu = parseFloat(node.pagu_revisi) || 0
+    return pagu > 0 && lock >= pagu
+}
+
+function normalizeNodeByLock(node: PreviewNode): PreviewNode {
+    if (!isLockedByPagu(node)) return node
+    return {
+        ...node,
+        realisasi_lalu: '0',
+        realisasi_ini: '0',
+        realisasi_sd: '0',
+        persentase: '0',
+        sisa: node.pagu_revisi,
+    }
+}
+
 // Flatten tree back to array preserving parent references
 
 
@@ -76,17 +97,20 @@ function EditableCell({
     onChange,
     type = 'text',
     className = '',
+    disabled = false,
 }: {
     value: string
     onChange: (val: string) => void
     type?: 'text' | 'number'
     className?: string
+    disabled?: boolean
 }) {
     const [editing, setEditing] = useState(false)
     const [draft, setDraft] = useState(value)
     const inputRef = useRef<HTMLInputElement>(null)
 
     const startEdit = () => {
+        if (disabled) return
         setDraft(value)
         setEditing(true)
         setTimeout(() => inputRef.current?.focus(), 50)
@@ -129,8 +153,8 @@ function EditableCell({
     return (
         <span
             onClick={startEdit}
-            title="Klik untuk mengedit"
-            className={`cursor-pointer hover:bg-primary-50 hover:text-primary-700 px-1 py-0.5 rounded transition-colors ${className}`}
+            title={disabled ? 'Nilai otomatis karena lock pagu > 0' : 'Klik untuk mengedit'}
+            className={`px-1 py-0.5 rounded transition-colors ${disabled ? 'cursor-not-allowed text-slate-400 bg-slate-50' : 'cursor-pointer hover:bg-primary-50 hover:text-primary-700'} ${className}`}
         >
             {value || <span className="text-slate-300 italic">kosong</span>}
         </span>
@@ -198,14 +222,15 @@ function PreviewTreeRow({
     }
 
     const pagu = parseFloat(node.pagu_revisi) || 0
-    const realisasi = parseFloat(node.realisasi_sd) || 0
+    const isLocked = isLockedByPagu(node)
+    const realisasi = isLocked ? 0 : (parseFloat(node.realisasi_sd) || 0)
     const sisa = parseFloat(node.sisa) || 0
 
     let sumChildrenPagu = 0
     let sumChildrenReal = 0
     if (hasChildren) {
         sumChildrenPagu = node.children.reduce((acc, child) => acc + (parseFloat(child.pagu_revisi) || 0), 0)
-        sumChildrenReal = node.children.reduce((acc, child) => acc + (parseFloat(child.realisasi_sd) || 0), 0)
+        sumChildrenReal = node.children.reduce((acc, child) => acc + (isLockedByPagu(child) ? 0 : (parseFloat(child.realisasi_sd) || 0)), 0)
     }
 
     const isPaguMismatch = hasChildren && Math.abs(pagu - sumChildrenPagu) > 0.5
@@ -280,15 +305,21 @@ function PreviewTreeRow({
                 {/* Realisasi */}
                 <td className={`px-3 py-2.5 text-right border-b border-slate-100 tabular-nums text-xs transition-colors ${isRealMismatch ? 'bg-red-50/50' : ''}`}>
                     <div className="flex items-center justify-end gap-1.5">
+                        {isLocked && (
+                            <span title="Node terkunci: realisasi harus 0">
+                                <CheckCircle2 size={14} className="text-amber-500 shrink-0" />
+                            </span>
+                        )}
                         {isRealMismatch && (
                             <span title={`Tidak sinkron dengan rincian: ${formatCurrency(sumChildrenReal)}`}>
                                 <AlertCircle size={14} className="text-red-500 shrink-0" />
                             </span>
                         )}
                         <EditableCell
-                            value={node.realisasi_sd}
+                            value={isLocked ? '0' : node.realisasi_sd}
                             type="number"
                             onChange={(val) => onUpdateNode(node.temp_id, 'realisasi_sd', val)}
+                            disabled={isLocked}
                             className={`text-right w-full ${isRealMismatch ? 'text-red-600 font-bold' : ''}`}
                         />
                     </div>
@@ -331,12 +362,12 @@ function PreviewTreeRow({
     )
 }
 
-export default function ImportPreviewModal({ onClose, onImported, previewMutation, confirmImportMutation, createSnapshotMutation }: ImportPreviewModalProps) {
+export default function ImportPreviewModal({ onClose, onImported, initialTahun, initialBulan, initialRevisi, previewMutation, confirmImportMutation, createSnapshotMutation }: ImportPreviewModalProps) {
     const [step, setStep] = useState<Step>('upload')
     const [importFile, setImportFile] = useState<File | null>(null)
-    const [importTahun, setImportTahun] = useState(new Date().getFullYear())
-    const [importBulan, setImportBulan] = useState(new Date().getMonth() + 1)
-    const [importRevisi, setImportRevisi] = useState('1')
+    const [importTahun, setImportTahun] = useState(initialTahun ?? new Date().getFullYear())
+    const [importBulan, setImportBulan] = useState(initialBulan ?? new Date().getMonth() + 1)
+    const [importRevisi, setImportRevisi] = useState((initialRevisi && initialRevisi.trim() !== '') ? initialRevisi : '1')
     const [isDragging, setIsDragging] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -374,7 +405,7 @@ export default function ImportPreviewModal({ onClose, onImported, previewMutatio
         try {
             const data = await previewMutation.mutateAsync({ file: importFile })
             setPreviewData(data)
-            setEditedNodes(data.nodes)
+            setEditedNodes(data.nodes.map(normalizeNodeByLock))
 
             // Auto-expand first 2 levels
             const autoExpand = new Set<string>()
@@ -476,7 +507,11 @@ export default function ImportPreviewModal({ onClose, onImported, previewMutatio
                 const children = childrenMap.get(temp_id) || []
 
                 if (children.length === 0) {
-                    return { pagu: parseFloat(node.pagu_revisi) || 0, real: parseFloat(node.realisasi_sd) || 0 }
+                    const leafPagu = parseFloat(node.pagu_revisi) || 0
+                    const leafReal = isLockedByPagu(node) ? 0 : (parseFloat(node.realisasi_sd) || 0)
+                    node.realisasi_sd = leafReal.toString()
+                    node.sisa = (leafPagu - leafReal).toString()
+                    return { pagu: leafPagu, real: leafReal }
                 }
 
                 let sumPagu = 0
@@ -488,6 +523,15 @@ export default function ImportPreviewModal({ onClose, onImported, previewMutatio
                 }
 
                 node.pagu_revisi = sumPagu.toString()
+                if (isLockedByPagu(node)) {
+                    node.realisasi_sd = '0'
+                    node.realisasi_lalu = '0'
+                    node.realisasi_ini = '0'
+                    node.persentase = '0'
+                    node.sisa = sumPagu.toString()
+                    return { pagu: sumPagu, real: 0 }
+                }
+
                 node.realisasi_sd = sumReal.toString()
                 node.sisa = (sumPagu - sumReal).toString()
 
@@ -511,9 +555,11 @@ export default function ImportPreviewModal({ onClose, onImported, previewMutatio
         setStep('saving')
 
         try {
+            const normalizedNodes = editedNodes.map(normalizeNodeByLock)
             const result = await confirmImportMutation.mutateAsync({
                 tahun_anggaran: importTahun,
-                nodes: editedNodes
+                format_detected: previewData?.format_detected,
+                nodes: normalizedNodes
             })
 
             // Trigger snapshot otomatis setiap kali revisi DIPA berhasil diupload
@@ -525,10 +571,10 @@ export default function ImportPreviewModal({ onClose, onImported, previewMutatio
                 // fallback if empty
                 periodeStr += `-Rev`
             }
-            await createSnapshotMutation.mutateAsync({ periode: periodeStr }).catch(console.error);
+            await createSnapshotMutation.mutateAsync({ periode: periodeStr }).catch(console.error)
 
             setSuccessResult(result)
-            onImported(importTahun)
+            onImported({ tahun: importTahun, bulan: importBulan, periode: periodeStr })
         } catch (e) {
             setError(e instanceof Error ? e.message : 'Gagal menyimpan data')
             setStep('preview')
