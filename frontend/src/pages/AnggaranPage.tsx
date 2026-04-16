@@ -9,6 +9,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { formatCurrency } from '@/lib/formatCurrency'
 import { FISCAL_YEAR_OPTIONS } from '@/shared/config/constants'
 import { useToast } from '@/shared/hooks/useToast'
+import { useQueryClient } from '@tanstack/react-query'
 
 function Breadcrumbs({ path, onNavigate }: { path: TreeNode[], onNavigate: (index: number) => void }) {
     return (
@@ -131,6 +132,7 @@ const MONTH_OPTIONS = [
 ];
 
 export default function AnggaranPage() {
+    const queryClient = useQueryClient()
     const currentUser = useAuthStore(s => s.user)
     const canCreate = currentUser?.Permissions?.includes('anggaran:create')
     const { showToast } = useToast()
@@ -164,15 +166,13 @@ export default function AnggaranPage() {
     })()
 
     // Determine the actual derived periode
-    let derivedPeriode: string | undefined;
-    if (revisi && availableRevisions.includes(revisi)) {
-        derivedPeriode = revisi
-    } else {
+    let derivedPeriode: string | undefined = revisi || undefined;
+    if (!revisi) {
         if (isCurrentMonth) {
-            derivedPeriode = undefined // live data
+            derivedPeriode = undefined; // live data
         } else {
-            // Default to latest revision, or fallback to prefix which returns empty array
-            derivedPeriode = availableRevisions.length > 0 ? availableRevisions[availableRevisions.length - 1] : targetPeriodePrefix
+            // Default to latest revision, or fallback to first revision
+            derivedPeriode = availableRevisions.length > 0 ? availableRevisions[availableRevisions.length - 1] : `${targetPeriodePrefix}1`;
         }
     }
 
@@ -207,8 +207,7 @@ export default function AnggaranPage() {
                     <p className="text-base text-slate-600 mt-1">Rekapitulasi Pelaksanaan Anggaran</p>
                 </div>
                 <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2">
-                        <label className="text-base text-slate-600 font-medium">Tahun:</label>
+                    <div className="flex flex-wrap items-center gap-2">
                         <select
                             value={tahun}
                             onChange={(e) => {
@@ -216,15 +215,14 @@ export default function AnggaranPage() {
                                 setRevisi('');
                                 setCurrentPathIds([]);
                             }}
-                            className="border border-slate-200 rounded-lg px-3 py-3 text-base bg-white"
+                            className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white font-medium"
+                            title="Tahun Anggaran"
                         >
                             {FISCAL_YEAR_OPTIONS.map(y => (
                                 <option key={y} value={y}>{y}</option>
                             ))}
                         </select>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <label className="text-base text-slate-600 font-medium">Bulan:</label>
+
                         <select
                             value={bulan}
                             onChange={(e) => {
@@ -232,40 +230,45 @@ export default function AnggaranPage() {
                                 setRevisi('');
                                 setCurrentPathIds([]);
                             }}
-                            className="border border-slate-200 rounded-lg px-3 py-3 text-base bg-white"
+                            className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white font-medium"
+                            title="Bulan"
                         >
                             {MONTH_OPTIONS.map(m => (
                                 <option key={m.value} value={m.value}>{m.label}</option>
                             ))}
                         </select>
-                    </div>
 
-                    {(availableRevisions.length > 0 || isCurrentMonth) && (
-                        <div className="flex items-center gap-2">
-                            <label className="text-base text-slate-600 font-medium">Revisi:</label>
+                        <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white" title="Nomor Revisi">
+                            <span className="px-3 py-2 text-sm text-slate-500 border-r border-slate-200 bg-slate-50 font-medium">
+                                Rev
+                            </span>
                             <select
-                                value={revisi || (isCurrentMonth ? 'live' : availableRevisions[availableRevisions.length - 1])}
+                                value={derivedPeriode || 'live'}
                                 onChange={(e) => {
                                     setRevisi(e.target.value === 'live' ? '' : e.target.value);
+                                    queryClient.invalidateQueries({ queryKey: ['anggaran', 'snapshots'] });
                                     setCurrentPathIds([]);
                                 }}
-                                className="border border-slate-200 rounded-lg px-3 py-3 text-base bg-white"
+                                className="w-24 px-2 py-2 text-sm focus:outline-none font-medium bg-white cursor-pointer"
                             >
-                                {isCurrentMonth && <option value="live">Data Berjalan (Live)</option>}
-                                {availableRevisions.map(rev => {
-                                    // Extract label from "YYYY-MM-RevLABEL"
-                                    const label = rev.split('-Rev')[1] || 'Awal';
+                                {isCurrentMonth && <option value="live">Live</option>}
+                                {Array.from({ length: 21 }, (_, i) => {
+                                    const revValue = `${targetPeriodePrefix}${i}`;
                                     return (
-                                        <option key={rev} value={rev}>Revisi {label}</option>
+                                        <option key={revValue} value={revValue}>{i}</option>
                                     );
                                 })}
                             </select>
                         </div>
-                    )}
+                    </div>
                     <button
-                        onClick={() => query.refetch()}
+                        onClick={() => {
+                            queryClient.invalidateQueries({ queryKey: ['anggaran', 'snapshots'] });
+                            query.refetch();
+                        }}
                         disabled={loading}
                         className="inline-flex items-center gap-2 px-4 py-3 border border-slate-200 rounded-lg text-base text-slate-600 hover:bg-slate-50 transition-colors"
+                        title="Perbarui Data"
                     >
                         <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
                         Perbarui Data
