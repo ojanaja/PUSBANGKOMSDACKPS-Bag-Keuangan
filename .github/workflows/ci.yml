@@ -148,3 +148,23 @@ jobs:
           labels: ${{ steps.meta-nginx.outputs.labels }}
           platforms: linux/amd64
 
+      - name: Extract Metadata (Storage Service)
+        id: meta-storage
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/keuangan-pusbangkom-storage-service
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-,format=short
+            type=ref,event=branch
+            type=ref,event=tag
+
+      - name: Build and Push Storage Service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./storage-service
+          file: ./storage-service/Dockerfile
+          push: true
+          tags: ${{ steps.meta-storage.outputs.tags }}
+          labels: ${{ steps.meta-storage.outputs.labels }}
+          platforms: linux/amd64

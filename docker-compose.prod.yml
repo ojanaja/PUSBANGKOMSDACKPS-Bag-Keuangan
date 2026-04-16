@@ -69,8 +69,10 @@ services:
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS}
       GOMEMLIMIT: 96MiB
       GOGC: 100
+      STORAGE_SERVICE_ADDR: storage-service:50051
     depends_on:
       - db
+      - storage-service
     volumes:
       - backend_storage:/app/storage
       - kas_storage:/mnt/nas_data
@@ -78,6 +80,19 @@ services:
       - internal
     mem_limit: 160m
     cpus: 0.60
+
+  storage-service:
+    image: ghcr.io/ojanaja/keuangan-pusbangkom-storage-service:latest
+    container_name: keuangan-storage-service
+    restart: always
+    environment:
+      STORAGE_BASE_PATH: /app/data
+    volumes:
+      - kas_storage:/app/data
+    networks:
+      - internal
+    mem_limit: 128m
+    cpus: 0.40
 
   nginx:
     image: ghcr.io/ojanaja/keuangan-pusbangkom-nginx:latest
