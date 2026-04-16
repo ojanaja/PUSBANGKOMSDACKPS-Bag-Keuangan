@@ -155,7 +155,6 @@ function RKKSTable({
 }
 
 export default function AnggaranImportPage() {
-    const queryClient = useQueryClient()
     const currentUser = useAuthStore(s => s.user)
     const canCreate = currentUser?.Permissions?.includes('anggaran:create')
 
