@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Upload, Download, FileSpreadsheet, CheckCircle2, ChevronRight, ChevronDown } from 'lucide-react'
+import { Upload, Download, FileSpreadsheet, CheckCircle2, ChevronRight, ChevronDown, RefreshCw } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAnggaran } from '@/features/anggaran/application/useAnggaran'
 import ImportPreviewModal from '@/features/anggaran/components/ImportPreviewModal'
 import { useAuthStore } from '@/stores/authStore'
@@ -48,6 +49,7 @@ function RKKSTable({
     bulan: number, setBulan: (v: number) => void,
     revisi: string, setRevisi: (v: string) => void
 }) {
+    const queryClient = useQueryClient()
 
     const formatedBulan = String(bulan).padStart(2, '0')
     const periodeStr = `${tahun}-${formatedBulan}-Rev${revisi}`
@@ -111,6 +113,18 @@ function RKKSTable({
                         </select>
                     </div>
                 </div>
+                <button
+                    onClick={() => {
+                        queryClient.invalidateQueries({ queryKey: ['anggaran'] });
+                        query.refetch();
+                    }}
+                    disabled={query.isFetching || query.isLoading}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 bg-white hover:bg-slate-50 transition-colors shadow-sm font-medium shrink-0"
+                    title="Perbarui Data"
+                >
+                    <RefreshCw size={16} className={query.isFetching || query.isLoading ? 'animate-spin' : ''} />
+                    Perbarui Data
+                </button>
             </div>
 
             <div className="overflow-x-auto min-h-[300px]">
@@ -141,6 +155,7 @@ function RKKSTable({
 }
 
 export default function AnggaranImportPage() {
+    const queryClient = useQueryClient()
     const currentUser = useAuthStore(s => s.user)
     const canCreate = currentUser?.Permissions?.includes('anggaran:create')
 

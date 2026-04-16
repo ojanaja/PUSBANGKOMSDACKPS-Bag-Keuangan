@@ -246,7 +246,7 @@ export default function AnggaranPage() {
                                 value={derivedPeriode || 'live'}
                                 onChange={(e) => {
                                     setRevisi(e.target.value === 'live' ? '' : e.target.value);
-                                    queryClient.invalidateQueries({ queryKey: ['anggaran', 'snapshots'] });
+                                    queryClient.invalidateQueries({ queryKey: ['anggaran'] });
                                     setCurrentPathIds([]);
                                 }}
                                 className="w-24 px-2 py-2 text-sm focus:outline-none font-medium bg-white cursor-pointer"
@@ -263,7 +263,7 @@ export default function AnggaranPage() {
                     </div>
                     <button
                         onClick={() => {
-                            queryClient.invalidateQueries({ queryKey: ['anggaran', 'snapshots'] });
+                            queryClient.invalidateQueries({ queryKey: ['anggaran'] });
                             query.refetch();
                         }}
                         disabled={loading}
