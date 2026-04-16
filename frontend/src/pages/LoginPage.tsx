@@ -23,7 +23,7 @@ export default function LoginPage() {
         <div className="min-h-screen flex items-center justify-center bg-slate-50 relative overflow-hidden">
             <div className="absolute inset-0">
                 <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-primary-200/20 rounded-full blur-3xl animate-pulse" />
-                <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-indigo-100/30 rounded-full blur-3xl animate-pulse delay-1000" />
+                <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-primary-100/30 rounded-full blur-3xl animate-pulse delay-1000" />
             </div>
 
             <div
@@ -36,10 +36,12 @@ export default function LoginPage() {
 
             <div className="relative z-10 w-full max-w-md px-6 py-12">
                 <div className="text-center mb-10">
-                    <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-white shadow-xl shadow-primary-500/10 mb-6 border border-slate-100">
-                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-600 to-indigo-600 flex items-center justify-center shadow-inner">
-                            <Lock className="w-7 h-7 text-white" />
-                        </div>
+                    <div className="inline-flex items-center justify-center w-24 h-24 rounded-3xl bg-white shadow-xl shadow-primary-500/10 mb-6 border border-slate-100 p-2 overflow-hidden">
+                        <img
+                            src="/logo/logo.png"
+                            alt="Logo"
+                            className="w-full h-full object-contain"
+                        />
                     </div>
                 </div>
 

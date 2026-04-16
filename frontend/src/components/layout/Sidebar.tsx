@@ -86,12 +86,11 @@ export default function Sidebar() {
                 }`}
         >
             <div className="flex items-center h-[60px] px-4 border-b border-white/10">
-                <div
-                    className={`w-10 h-10 rounded-lg bg-indigo-500 flex items-center justify-center text-white font-bold shrink-0 transition-opacity ${isCollapsed ? 'opacity-100' : ''
-                        }`}
-                >
-                    KP
-                </div>
+                <img
+                    src="/logo/logo.png"
+                    alt="Keuangan Pusbangkom"
+                    className="w-10 h-10 object-contain shrink-0"
+                />
                 {!isCollapsed && (
                     <span className="font-bold text-xl whitespace-nowrap overflow-hidden text-ellipsis ml-3">
                         Keuangan Pusbangkom
