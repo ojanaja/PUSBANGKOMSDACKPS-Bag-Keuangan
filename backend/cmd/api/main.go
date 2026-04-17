@@ -16,12 +16,30 @@ import (
 	authmw "github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/api/middleware"
 	"github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/db"
 	"github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/services"
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
+
+func runDBMigration(migrationURL string, dbSource string) {
+	migration, err := migrate.New(migrationURL, dbSource)
+	if err != nil {
+		slog.Error("cannot create new migrate instance", "error", err)
+		return
+	}
+
+	if err = migration.Up(); err != nil && err != migrate.ErrNoChange {
+		slog.Error("failed to run migrate up", "error", err)
+		return
+	}
+
+	slog.Info("db migrated successfully")
+}
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
@@ -62,6 +80,14 @@ func main() {
 	}
 
 	slog.Info("Successfully connected to database")
+
+	// Automatically run migrations if MIGRATION_URL is provided, or default to file://migrations
+	migrationURL := os.Getenv("MIGRATION_URL")
+	if migrationURL == "" {
+		migrationURL = "file://migrations"
+	}
+	runDBMigration(migrationURL, dbUrl)
+
 	database := db.New(pool)
 
 	storageAddr := os.Getenv("STORAGE_SERVICE_ADDR")
@@ -164,10 +190,13 @@ func main() {
 	apiGroup.GET("/anggaran/snapshots", wrapper.GetAnggaranSnapshots)
 	apiGroup.GET("/anggaran/tree", wrapper.GetAnggaranTree)
 	apiGroup.PUT("/anggaran/:id", wrapper.UpdateAnggaranNode)
+	apiGroup.DELETE("/anggaran/:id", wrapper.DeleteAnggaranNode, authmw.RequirePermission("anggaran:admin"))
 	apiGroup.PUT("/anggaran/:id/lock", wrapper.UpdateLockPagu)
 	apiGroup.POST("/anggaran/upload-bukti", wrapper.UploadBuktiAnggaran)
 	apiGroup.GET("/anggaran/:id/documents", wrapper.GetAnggaranDokumenByNode)
 	apiGroup.GET("/documents/:id", wrapper.DownloadDocument)
+	apiGroup.PUT("/documents/:id", wrapper.UpdateDocumentName, authmw.RequirePermission("dokumen:update"))
+	apiGroup.DELETE("/documents/:id", wrapper.DeleteDocument, authmw.RequirePermission("dokumen:delete"))
 	apiGroup.GET("/healthz", wrapper.GetHealthz)
 	apiGroup.GET("/readyz", wrapper.GetReadyz)
 	apiGroup.GET("/users", wrapper.ListUsers, authmw.RequirePermission("users:manage"))
