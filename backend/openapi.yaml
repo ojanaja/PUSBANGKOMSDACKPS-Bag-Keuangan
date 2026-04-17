@@ -393,6 +393,31 @@ paths:
           description: Bad request
         '404':
           description: Node not found
+    delete:
+      operationId: deleteAnggaranNode
+      summary: Delete an anggaran node and recursively update parents
+      tags: [Anggaran]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Anggaran deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          description: Bad request
+        '404':
+          description: Node not found
 
   /anggaran/{id}/documents:
     get:
@@ -432,6 +457,49 @@ paths:
           description: File content
         '404':
           description: Not found
+    put:
+      operationId: updateDocumentName
+      summary: Update the name of a document
+      tags: [Documents]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                original_name:
+                  type: string
+              required: [original_name]
+      responses:
+        '200':
+          description: Document updated successfully
+        '400':
+          description: Bad request
+    delete:
+      operationId: deleteDocument
+      summary: Delete a document by ID
+      tags: [Documents]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Document deleted successfully
+        '404':
+          description: Not found
+
 
   /users:
     get:

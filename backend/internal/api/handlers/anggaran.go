@@ -482,6 +482,66 @@ func (h *Handler) UpdateAnggaranNode(ctx echo.Context, id types.UUID) error {
 	return ctx.JSON(http.StatusOK, map[string]string{"message": "Anggaran updated successfully"})
 }
 
+func (h *Handler) DeleteAnggaranNode(ctx echo.Context, id types.UUID) error {
+	reqCtx := ctx.Request().Context()
+	tx, err := h.pool.Begin(reqCtx)
+	if err != nil {
+		slog.Error("Begin tx failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to begin transaction"})
+	}
+	defer func() {
+		_ = tx.Rollback(reqCtx)
+	}()
+
+	nodeID := uuidToPgUUID(uuid.UUID(id))
+
+	// Get parent before deleting to know where to rollup
+	var parentID pgtype.UUID
+	err = tx.QueryRow(reqCtx, `SELECT parent_id FROM anggaran_node WHERE id = $1`, nodeID).Scan(&parentID)
+	if err != nil {
+		slog.Error("Failed to get parent node for deletion", "error", err)
+		return ctx.JSON(http.StatusNotFound, map[string]string{"message": "node not found"})
+	}
+
+	_, err = tx.Exec(reqCtx, `DELETE FROM anggaran_node WHERE id = $1`, nodeID)
+	if err != nil {
+		slog.Error("Delete node failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to delete node"})
+	}
+
+	currNode := parentID
+	for currNode.Valid {
+		var nextParentID pgtype.UUID
+		err = tx.QueryRow(reqCtx, `SELECT parent_id FROM anggaran_node WHERE id = $1`, currNode).Scan(&nextParentID)
+		if err != nil {
+			break
+		}
+
+		_, err = tx.Exec(reqCtx, `
+			UPDATE anggaran_node p
+			SET pagu_revisi = (SELECT COALESCE(SUM(pagu_revisi), 0) FROM anggaran_node WHERE parent_id = p.id),
+				lock_pagu = (SELECT COALESCE(SUM(lock_pagu), 0) FROM anggaran_node WHERE parent_id = p.id),
+				realisasi_periode_lalu = (SELECT COALESCE(SUM(realisasi_periode_lalu), 0) FROM anggaran_node WHERE parent_id = p.id),
+				realisasi_periode_ini = (SELECT COALESCE(SUM(realisasi_periode_ini), 0) FROM anggaran_node WHERE parent_id = p.id)
+			WHERE p.id = $1
+		`, currNode)
+		if err != nil {
+			slog.Error("Rollup parent failed", "error", err)
+			return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to rollup parent node"})
+		}
+
+		currNode = nextParentID
+	}
+
+	if err := tx.Commit(reqCtx); err != nil {
+		slog.Error("Commit tx failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to update data"})
+	}
+
+	return ctx.JSON(http.StatusOK, map[string]string{"message": "Anggaran deleted successfully"})
+}
+
+
 func (h *Handler) UploadBuktiAnggaran(ctx echo.Context) error {
 	file, err := ctx.FormFile("file")
 	if err != nil {
@@ -577,16 +637,53 @@ func (h *Handler) UpdateLockPagu(ctx echo.Context, id types.UUID) error {
 		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "invalid request body"})
 	}
 
+	reqCtx := ctx.Request().Context()
+	tx, err := h.pool.Begin(reqCtx)
+	if err != nil {
+		slog.Error("Begin tx failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to begin transaction"})
+	}
+	defer func() {
+		_ = tx.Rollback(reqCtx)
+	}()
+
 	lockPagu := mustDecimalNumeric(req.LockPagu)
 	nodeID := uuidToPgUUID(uuid.UUID(id))
 
-	_, err := h.queries.UpdateLockPagu(ctx.Request().Context(), db.UpdateLockPaguParams{
-		LockPagu: lockPagu,
-		ID:       nodeID,
-	})
+	_, err = tx.Exec(reqCtx, `
+		UPDATE anggaran_node 
+		SET lock_pagu = $1
+		WHERE id = $2
+	`, lockPagu, nodeID)
 	if err != nil {
 		slog.Error("UpdateLockPagu failed", "error", err)
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to update lock pagu"})
+	}
+
+	currNode := nodeID
+	for {
+		var parentID pgtype.UUID
+		err = tx.QueryRow(reqCtx, `SELECT parent_id FROM anggaran_node WHERE id = $1`, currNode).Scan(&parentID)
+		if err != nil || !parentID.Valid {
+			break
+		}
+
+		_, err = tx.Exec(reqCtx, `
+			UPDATE anggaran_node p
+			SET lock_pagu = (SELECT COALESCE(SUM(lock_pagu), 0) FROM anggaran_node WHERE parent_id = p.id)
+			WHERE p.id = $1
+		`, parentID)
+		if err != nil {
+			slog.Error("Rollup lock_pagu failed", "error", err)
+			return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to rollup parent node"})
+		}
+
+		currNode = parentID
+	}
+
+	if err := tx.Commit(reqCtx); err != nil {
+		slog.Error("Commit tx failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to update data"})
 	}
 
 	return ctx.JSON(http.StatusOK, map[string]string{"message": "Lock Pagu updated successfully"})

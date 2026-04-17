@@ -4,17 +4,10 @@
 package handlers
 
 import (
-	"bytes"
-	"compress/gzip"
-	"encoding/base64"
 	"fmt"
 	"net/http"
-	"net/url"
-	"path"
-	"strings"
 	"time"
 
-	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/labstack/echo/v4"
 	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -240,6 +233,11 @@ type UploadBuktiAnggaranMultipartBody struct {
 	NodeId openapi_types.UUID `json:"node_id"`
 }
 
+// UpdateDocumentNameJSONBody defines parameters for UpdateDocumentName.
+type UpdateDocumentNameJSONBody struct {
+	OriginalName string `json:"original_name"`
+}
+
 // ImportAnggaranDataMultipartRequestBody defines body for ImportAnggaranData for multipart/form-data ContentType.
 type ImportAnggaranDataMultipartRequestBody ImportAnggaranDataMultipartBody
 
@@ -254,6 +252,9 @@ type UpdateAnggaranNodeJSONRequestBody = UpdateAnggaranRequest
 
 // UpdateLockPaguJSONRequestBody defines body for UpdateLockPagu for application/json ContentType.
 type UpdateLockPaguJSONRequestBody = UpdateLockPaguRequest
+
+// UpdateDocumentNameJSONRequestBody defines body for UpdateDocumentName for application/json ContentType.
+type UpdateDocumentNameJSONRequestBody UpdateDocumentNameJSONBody
 
 // CreateUserJSONRequestBody defines body for CreateUser for application/json ContentType.
 type CreateUserJSONRequestBody = CreateUserRequest
@@ -278,6 +279,9 @@ type ServerInterface interface {
 	// Upload a document as proof for an anggaran node
 	// (POST /anggaran/upload-bukti)
 	UploadBuktiAnggaran(ctx echo.Context) error
+	// Delete an anggaran node and recursively update parents
+	// (DELETE /anggaran/{id})
+	DeleteAnggaranNode(ctx echo.Context, id openapi_types.UUID) error
 	// Update bottom-level anggaran and rollup
 	// (PUT /anggaran/{id})
 	UpdateAnggaranNode(ctx echo.Context, id openapi_types.UUID) error
@@ -287,9 +291,15 @@ type ServerInterface interface {
 	// Update the lock pagu value for a specific node
 	// (PUT /anggaran/{id}/lock)
 	UpdateLockPagu(ctx echo.Context, id openapi_types.UUID) error
+	// Delete a document by ID
+	// (DELETE /documents/{id})
+	DeleteDocument(ctx echo.Context, id openapi_types.UUID) error
 	// Download a document by ID
 	// (GET /documents/{id})
 	DownloadDocument(ctx echo.Context, id openapi_types.UUID) error
+	// Update the name of a document
+	// (PUT /documents/{id})
+	UpdateDocumentName(ctx echo.Context, id openapi_types.UUID) error
 	// Health check endpoint
 	// (GET /healthz)
 	GetHealthz(ctx echo.Context) error
@@ -402,6 +412,24 @@ func (w *ServerInterfaceWrapper) UploadBuktiAnggaran(ctx echo.Context) error {
 	return err
 }
 
+// DeleteAnggaranNode converts echo context to params.
+func (w *ServerInterfaceWrapper) DeleteAnggaranNode(ctx echo.Context) error {
+	var err error
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", ctx.Param("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter id: %s", err))
+	}
+
+	ctx.Set(CookieAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.DeleteAnggaranNode(ctx, id)
+	return err
+}
+
 // UpdateAnggaranNode converts echo context to params.
 func (w *ServerInterfaceWrapper) UpdateAnggaranNode(ctx echo.Context) error {
 	var err error
@@ -456,6 +484,24 @@ func (w *ServerInterfaceWrapper) UpdateLockPagu(ctx echo.Context) error {
 	return err
 }
 
+// DeleteDocument converts echo context to params.
+func (w *ServerInterfaceWrapper) DeleteDocument(ctx echo.Context) error {
+	var err error
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", ctx.Param("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter id: %s", err))
+	}
+
+	ctx.Set(CookieAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.DeleteDocument(ctx, id)
+	return err
+}
+
 // DownloadDocument converts echo context to params.
 func (w *ServerInterfaceWrapper) DownloadDocument(ctx echo.Context) error {
 	var err error
@@ -471,6 +517,24 @@ func (w *ServerInterfaceWrapper) DownloadDocument(ctx echo.Context) error {
 
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.DownloadDocument(ctx, id)
+	return err
+}
+
+// UpdateDocumentName converts echo context to params.
+func (w *ServerInterfaceWrapper) UpdateDocumentName(ctx echo.Context) error {
+	var err error
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", ctx.Param("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter id: %s", err))
+	}
+
+	ctx.Set(CookieAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.UpdateDocumentName(ctx, id)
 	return err
 }
 
@@ -583,10 +647,13 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 	router.GET(baseURL+"/anggaran/snapshots", wrapper.GetAnggaranSnapshots)
 	router.GET(baseURL+"/anggaran/tree", wrapper.GetAnggaranTree)
 	router.POST(baseURL+"/anggaran/upload-bukti", wrapper.UploadBuktiAnggaran)
+	router.DELETE(baseURL+"/anggaran/:id", wrapper.DeleteAnggaranNode)
 	router.PUT(baseURL+"/anggaran/:id", wrapper.UpdateAnggaranNode)
 	router.GET(baseURL+"/anggaran/:id/documents", wrapper.GetAnggaranDokumenByNode)
 	router.PUT(baseURL+"/anggaran/:id/lock", wrapper.UpdateLockPagu)
+	router.DELETE(baseURL+"/documents/:id", wrapper.DeleteDocument)
 	router.GET(baseURL+"/documents/:id", wrapper.DownloadDocument)
+	router.PUT(baseURL+"/documents/:id", wrapper.UpdateDocumentName)
 	router.GET(baseURL+"/healthz", wrapper.GetHealthz)
 	router.GET(baseURL+"/readyz", wrapper.GetReadyz)
 	router.GET(baseURL+"/users", wrapper.ListUsers)
@@ -594,113 +661,4 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 	router.DELETE(baseURL+"/users/:id", wrapper.DeleteUser)
 	router.PUT(baseURL+"/users/:id", wrapper.UpdateUser)
 
-}
-
-// Base64 encoded, gzipped, json marshaled Swagger object
-var swaggerSpec = []string{
-
-	"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",
-	"///d7cQ2piMAAA==",
-}
-
-// GetSwagger returns the content of the embedded swagger specification file
-// or error if failed to decode
-func decodeSpec() ([]byte, error) {
-	zipped, err := base64.StdEncoding.DecodeString(strings.Join(swaggerSpec, ""))
-	if err != nil {
-		return nil, fmt.Errorf("error base64 decoding spec: %w", err)
-	}
-	zr, err := gzip.NewReader(bytes.NewReader(zipped))
-	if err != nil {
-		return nil, fmt.Errorf("error decompressing spec: %w", err)
-	}
-	var buf bytes.Buffer
-	_, err = buf.ReadFrom(zr)
-	if err != nil {
-		return nil, fmt.Errorf("error decompressing spec: %w", err)
-	}
-
-	return buf.Bytes(), nil
-}
-
-var rawSpec = decodeSpecCached()
-
-// a naive cached of a decoded swagger spec
-func decodeSpecCached() func() ([]byte, error) {
-	data, err := decodeSpec()
-	return func() ([]byte, error) {
-		return data, err
-	}
-}
-
-// Constructs a synthetic filesystem for resolving external references when loading openapi specifications.
-func PathToRawSpec(pathToFile string) map[string]func() ([]byte, error) {
-	res := make(map[string]func() ([]byte, error))
-	if len(pathToFile) > 0 {
-		res[pathToFile] = rawSpec
-	}
-
-	return res
-}
-
-// GetSwagger returns the Swagger specification corresponding to the generated code
-// in this file. The external references of Swagger specification are resolved.
-// The logic of resolving external references is tightly connected to "import-mapping" feature.
-// Externally referenced files must be embedded in the corresponding golang packages.
-// Urls can be supported but this task was out of the scope.
-func GetSwagger() (swagger *openapi3.T, err error) {
-	resolvePath := PathToRawSpec("")
-
-	loader := openapi3.NewLoader()
-	loader.IsExternalRefsAllowed = true
-	loader.ReadFromURIFunc = func(loader *openapi3.Loader, url *url.URL) ([]byte, error) {
-		pathToFile := url.String()
-		pathToFile = path.Clean(pathToFile)
-		getSpec, ok := resolvePath[pathToFile]
-		if !ok {
-			err1 := fmt.Errorf("path not found: %s", pathToFile)
-			return nil, err1
-		}
-		return getSpec()
-	}
-	var specData []byte
-	specData, err = rawSpec()
-	if err != nil {
-		return
-	}
-	swagger, err = loader.LoadFromData(specData)
-	if err != nil {
-		return
-	}
-	return
 }
