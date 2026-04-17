@@ -40,6 +40,9 @@ RUN apk add --no-cache ca-certificates tzdata ghostscript
 # Copy the binary from the builder
 COPY --from=builder /app/backend/main .
 
+# Copy migrations so they can be run during startup
+COPY --from=builder /app/backend/migrations ./migrations
+
 # Expose port
 EXPOSE 8080
 
