@@ -311,7 +311,9 @@ export default function UsersPage() {
                                     <div className="p-4 grid grid-cols-2 gap-3">
                                         {[
                                             { id: 'dokumen:create', label: 'Create' },
-                                            { id: 'dokumen:read', label: 'Read' }
+                                            { id: 'dokumen:read', label: 'Read' },
+                                            { id: 'dokumen:update', label: 'Update' },
+                                            { id: 'dokumen:delete', label: 'Delete' }
                                         ].map(feat => (
                                             <label key={feat.id} className="flex items-start justify-start gap-3 cursor-pointer group">
                                                 <div className="flex items-center h-5">

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiGet, apiPost, apiPut } from '@/shared/api/httpClient'
+import { apiGet, apiPost, apiPut, apiDelete } from '@/shared/api/httpClient'
 
 export interface APIAnggaranNode {
     id: string
@@ -213,7 +213,31 @@ export function useAnggaran(tahun: number, periode?: string, source?: string) {
         updatePaguMutation,
         updateLockPaguMutation,
         uploadBuktiMutation,
-        createSnapshotMutation
+        createSnapshotMutation,
+        updateDokumenMutation: useMutation({
+            mutationFn: async ({ documentId, original_name }: { documentId: string, original_name: string }) => {
+                return apiPut(`/documents/${documentId}`, { original_name })
+            },
+            onSuccess: () => {
+                queryClient.invalidateQueries({ queryKey: ['anggaran', 'documents'] })
+            }
+        }),
+        deleteDokumenMutation: useMutation({
+             mutationFn: async (documentId: string) => {
+                 return apiDelete(`/documents/${documentId}`)
+             },
+             onSuccess: () => {
+                 queryClient.invalidateQueries({ queryKey: ['anggaran', 'documents'] })
+             }
+        }),
+        deleteNodeMutation: useMutation({
+            mutationFn: async (nodeId: string) => {
+                return apiDelete(`/anggaran/${nodeId}`)
+            },
+            onSuccess: () => {
+                queryClient.invalidateQueries({ queryKey: ['anggaran'] })
+            }
+        })
     }
 }
 

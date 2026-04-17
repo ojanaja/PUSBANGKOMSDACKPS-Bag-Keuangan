@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Upload, ChevronRight, X, RefreshCw, AlertCircle, Loader2, FolderKanban, FileText, Database, Eye, ExternalLink, Edit2, User, Clock, Download, Lock } from 'lucide-react'
+import { Upload, ChevronRight, X, RefreshCw, AlertCircle, Loader2, FolderKanban, FileText, Database, Eye, ExternalLink, Edit2, Trash2, User, Clock, Download, Lock } from 'lucide-react'
 import { useAnggaran, useAnggaranDokumen, useAnggaranSnapshots, type TreeNode } from '@/features/anggaran/application/useAnggaran'
 import FileDropzone from '@/components/common/FileDropzone'
 import EditPaguModal from '@/features/anggaran/components/EditPaguModal'
@@ -10,7 +10,7 @@ import { formatCurrency } from '@/lib/formatCurrency'
 import { FISCAL_YEAR_OPTIONS } from '@/shared/config/constants'
 import { useToast } from '@/shared/hooks/useToast'
 import { useQueryClient } from '@tanstack/react-query'
-
+import ConfirmDialog from '@/shared/ui/ConfirmDialog'
 function Breadcrumbs({ path, onNavigate }: { path: TreeNode[], onNavigate: (index: number) => void }) {
     return (
         <nav className="flex items-center text-base text-slate-600 mb-4 bg-white px-4 py-3 rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
@@ -37,7 +37,7 @@ function Breadcrumbs({ path, onNavigate }: { path: TreeNode[], onNavigate: (inde
     )
 }
 
-function FolderRow({ node, onClick, onUpload, onEdit }: { node: TreeNode; onClick: () => void; onUpload: (node: TreeNode) => void; onEdit: (node: TreeNode) => void }) {
+function FolderRow({ node, onClick, onUpload, onEdit, onDelete }: { node: TreeNode; onClick: () => void; onUpload: (node: TreeNode) => void; onEdit: (node: TreeNode) => void; onDelete: (node: TreeNode) => void }) {
     const hasChildren = node.children && node.children.length > 0
     const persentase = node.pagu_revisi > 0 ? (node.realisasi_sd_periode / node.pagu_revisi) * 100 : 0
     const currentUser = useAuthStore(s => s.user)
@@ -109,6 +109,16 @@ function FolderRow({ node, onClick, onUpload, onEdit }: { node: TreeNode; onClic
                                 <span>Dokumen</span>
                             </button>
                         )}
+                        {canEditPagu && (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onDelete(node); }}
+                                className="inline-flex w-full items-center justify-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-slate-200"
+                                title="Hapus Akun/Rincian"
+                            >
+                                <Trash2 size={16} />
+                                <span>Hapus</span>
+                            </button>
+                        )}
                     </div>
                 )}
             </td>
@@ -144,6 +154,9 @@ export default function AnggaranPage() {
     const [currentPathIds, setCurrentPathIds] = useState<string[]>([])
     const [uploadTarget, setUploadTarget] = useState<TreeNode | null>(null)
     const [editTarget, setEditTarget] = useState<TreeNode | null>(null)
+    const [editingDoc, setEditingDoc] = useState<{id: string, original_name: string} | null>(null)
+    const [deleteDocTarget, setDeleteDocTarget] = useState<string | null>(null)
+    const [deleteNodeTarget, setDeleteNodeTarget] = useState<TreeNode | null>(null)
 
     // Check if the selected month is the actual current month
     const now = new Date()
@@ -176,8 +189,49 @@ export default function AnggaranPage() {
         }
     }
 
-    const { query, previewMutation, confirmImportMutation, updatePaguMutation, updateLockPaguMutation, uploadBuktiMutation, createSnapshotMutation } = useAnggaran(tahun, derivedPeriode, 'fa_detail,emon')
+    const { query, previewMutation, confirmImportMutation, updatePaguMutation, updateLockPaguMutation, uploadBuktiMutation, createSnapshotMutation, updateDokumenMutation, deleteDokumenMutation, deleteNodeMutation } = useAnggaran(tahun, derivedPeriode, 'fa_detail,emon')
     const { data: uploadDocuments = [], refetch: refetchDocuments, isLoading: loadingDocs } = useAnggaranDokumen(uploadTarget?.id || null)
+
+    const canUpdateDokumen = currentUser?.Permissions?.includes('dokumen:update')
+    const canDeleteDokumen = currentUser?.Permissions?.includes('dokumen:delete')
+
+    const handleDeleteDokumen = async () => {
+        if (!deleteDocTarget) return
+        try {
+            await deleteDokumenMutation.mutateAsync(deleteDocTarget)
+            showToast('Dokumen berhasil dihapus', 'success')
+            refetchDocuments()
+        } catch (e) {
+            showToast('Gagal menghapus dokumen', 'error')
+        } finally {
+            setDeleteDocTarget(null)
+        }
+    }
+
+    const handleDeleteNode = async () => {
+        if (!deleteNodeTarget) return
+        try {
+            await deleteNodeMutation.mutateAsync(deleteNodeTarget.id)
+            showToast('Akun/Rincian berhasil dihapus', 'success')
+        } catch (e) {
+            showToast('Gagal menghapus akun', 'error')
+        } finally {
+            setDeleteNodeTarget(null)
+        }
+    }
+
+    const handleUpdateDokumen = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!editingDoc) return
+        try {
+            await updateDokumenMutation.mutateAsync({ documentId: editingDoc.id, original_name: editingDoc.original_name })
+            showToast('Nama dokumen berhasil diperbarui', 'success')
+            refetchDocuments()
+            setEditingDoc(null)
+        } catch (e) {
+            showToast('Gagal memperbarui nama dokumen', 'error')
+        }
+    }
 
     const tree = query.data || []
     const loading = query.isLoading
@@ -391,6 +445,9 @@ export default function AnggaranPage() {
                                             onEdit={(n) => {
                                                 setEditTarget(n)
                                             }}
+                                            onDelete={(n) => {
+                                                setDeleteNodeTarget(n)
+                                            }}
                                         />
                                     ))
                                 })()}
@@ -542,6 +599,24 @@ export default function AnggaranPage() {
                                                             >
                                                                 <ExternalLink size={14} /> Unduh
                                                             </a>
+                                                            {canUpdateDokumen && (
+                                                                <button
+                                                                    onClick={() => setEditingDoc({ id: doc.id, original_name: doc.original_name })}
+                                                                    className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg text-xs font-bold transition-all border border-amber-100"
+                                                                    title="Edit Nama Dokumen"
+                                                                >
+                                                                    <Edit2 size={14} /> Edit
+                                                                </button>
+                                                            )}
+                                                            {canDeleteDokumen && (
+                                                                <button
+                                                                    onClick={() => setDeleteDocTarget(doc.id)}
+                                                                    className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-700 hover:bg-red-100 rounded-lg text-xs font-bold transition-all border border-red-100"
+                                                                    title="Hapus Dokumen"
+                                                                >
+                                                                    <Trash2 size={14} /> Hapus
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -573,6 +648,66 @@ export default function AnggaranPage() {
                     updateLockPaguMutation={updateLockPaguMutation}
                 />
             )}
+
+            {editingDoc && (
+                <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 animate-in zoom-in-95 duration-200">
+                        <h3 className="text-lg font-bold text-slate-900 mb-4">Edit Nama Dokumen</h3>
+                        <form onSubmit={handleUpdateDokumen}>
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Nama Dokumen</label>
+                                <input
+                                    type="text"
+                                    required
+                                    autoFocus
+                                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 text-sm"
+                                    value={editingDoc.original_name}
+                                    onChange={(e) => setEditingDoc({ ...editingDoc, original_name: e.target.value })}
+                                />
+                            </div>
+                            <div className="flex gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setEditingDoc(null)}
+                                    className="flex-1 px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-sm font-semibold transition-colors"
+                                >
+                                    Batal
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={updateDokumenMutation.isPending}
+                                    className="flex-1 px-4 py-2 bg-primary-600 text-white hover:bg-primary-700 rounded-lg text-sm font-semibold inline-flex justify-center items-center gap-2 transition-colors disabled:opacity-50"
+                                >
+                                    {updateDokumenMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Edit2 size={16} />}
+                                    Simpan Perubahan
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            <ConfirmDialog
+                open={deleteDocTarget !== null}
+                title="Hapus Dokumen?"
+                message="Apakah Anda yakin ingin menghapus dokumen ini? Dokumen yang dihapus tidak dapat dikembalikan."
+                confirmLabel="Hapus"
+                variant="danger"
+                loading={deleteDokumenMutation.isPending}
+                onConfirm={handleDeleteDokumen}
+                onCancel={() => setDeleteDocTarget(null)}
+            />
+
+            <ConfirmDialog
+                open={deleteNodeTarget !== null}
+                title="Hapus Akun/Rincian?"
+                message={`Apakah Anda yakin ingin menghapus rincian ${deleteNodeTarget?.kode} - ${deleteNodeTarget?.uraian} beserta seluruh sub-rincian di dalamnya? Anggaran pada tingkat di atasnya akan dikurangi secara otomatis. Tindakan ini permanen dan tidak dapat dibatalkan.`}
+                confirmLabel="Hapus Permanen"
+                variant="danger"
+                loading={deleteNodeMutation.isPending}
+                onConfirm={handleDeleteNode}
+                onCancel={() => setDeleteNodeTarget(null)}
+            />
         </div >
     )
 }
