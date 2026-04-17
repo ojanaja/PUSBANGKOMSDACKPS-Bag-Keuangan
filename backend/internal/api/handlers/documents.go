@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/PUSBANGKOMSDACKPS-Bag-Keuangan/internal/db"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -63,4 +64,50 @@ func (h *Handler) UploadDocument(ctx echo.Context) error {
 
 func (h *Handler) VerifyDocument(ctx echo.Context, id openapi_types.UUID) error {
 	return ctx.JSON(http.StatusNotImplemented, map[string]string{"message": "VerifyDocument is deactivated."})
+}
+
+func (h *Handler) UpdateDocumentName(ctx echo.Context, id openapi_types.UUID) error {
+	var body UpdateDocumentNameJSONRequestBody
+	if err := ctx.Bind(&body); err != nil {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "invalid request body"})
+	}
+
+	pgId := uuidToPgUUID(uuid.UUID(id))
+
+	if body.OriginalName == "" {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "original_name is required"})
+	}
+
+	// Update the name using our newly generated SQL query
+	_, err := h.queries.UpdateAnggaranDokumenName(ctx.Request().Context(), db.UpdateAnggaranDokumenNameParams{
+		OriginalName: body.OriginalName,
+		ID:           pgId,
+	})
+	if err != nil {
+		slog.Error("Failed to update document name", "id", id, "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to update document"})
+	}
+
+	return ctx.JSON(http.StatusOK, map[string]string{"message": "document updated successfully"})
+}
+
+func (h *Handler) DeleteDocument(ctx echo.Context, id openapi_types.UUID) error {
+	pgId := uuidToPgUUID(uuid.UUID(id))
+
+	// First try to check if the document exists in anggaran_dokumen_bukti before deleting
+	_, err := h.queries.GetAnggaranDokumenByID(ctx.Request().Context(), pgId)
+	if err != nil {
+		// Possibly standard document, try deleting from standard table
+		_ = h.queries.DeleteDocument(ctx.Request().Context(), pgId)
+		return ctx.JSON(http.StatusOK, map[string]string{"message": "document deleted successfully"})
+	}
+
+	// It's an anggaran dokumen, let's delete
+	err = h.queries.DeleteAnggaranDokumen(ctx.Request().Context(), pgId)
+	if err != nil {
+		slog.Error("Failed to delete document from db", "id", id, "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to delete document"})
+	}
+
+	return ctx.JSON(http.StatusOK, map[string]string{"message": "document deleted successfully"})
 }

@@ -1,0 +1,1 @@
+ALTER TABLE anggaran_dokumen_bukti ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;

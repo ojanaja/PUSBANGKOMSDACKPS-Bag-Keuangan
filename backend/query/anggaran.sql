@@ -87,11 +87,12 @@ SELECT
 FROM anggaran_dokumen_bukti d
 LEFT JOIN users u ON d.uploaded_by = u.id
 WHERE d.anggaran_node_id = $1
+AND d.deleted_at IS NULL
 ORDER BY d.created_at DESC;
 
 -- name: GetAnggaranDokumenByID :one
 SELECT * FROM anggaran_dokumen_bukti
-WHERE id = $1;
+WHERE id = $1 AND deleted_at IS NULL;
 
 -- name: GetAvailableSnapshots :many
 SELECT DISTINCT snapshot_periode
@@ -124,3 +125,14 @@ WITH RECURSIVE tree AS (
 )
 SELECT * FROM tree
 ORDER BY path;
+
+-- name: UpdateAnggaranDokumenName :one
+UPDATE anggaran_dokumen_bukti
+SET original_name = $1
+WHERE id = $2
+RETURNING *;
+
+-- name: DeleteAnggaranDokumen :exec
+UPDATE anggaran_dokumen_bukti
+SET deleted_at = CURRENT_TIMESTAMP
+WHERE id = $1;
