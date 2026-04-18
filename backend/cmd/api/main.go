@@ -190,7 +190,7 @@ func main() {
 	apiGroup.GET("/anggaran/snapshots", wrapper.GetAnggaranSnapshots)
 	apiGroup.GET("/anggaran/tree", wrapper.GetAnggaranTree)
 	apiGroup.PUT("/anggaran/:id", wrapper.UpdateAnggaranNode)
-	apiGroup.DELETE("/anggaran/:id", wrapper.DeleteAnggaranNode, authmw.RequirePermission("anggaran:admin"))
+	apiGroup.DELETE("/anggaran/:id", wrapper.DeleteAnggaranNode, authmw.RequirePermission("anggaran:delete"))
 	apiGroup.PUT("/anggaran/:id/lock", wrapper.UpdateLockPagu)
 	apiGroup.POST("/anggaran/upload-bukti", wrapper.UploadBuktiAnggaran)
 	apiGroup.GET("/anggaran/:id/documents", wrapper.GetAnggaranDokumenByNode)

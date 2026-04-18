@@ -42,6 +42,7 @@ function FolderRow({ node, onClick, onUpload, onEdit, onDelete }: { node: TreeNo
     const persentase = node.pagu_revisi > 0 ? (node.realisasi_sd_periode / node.pagu_revisi) * 100 : 0
     const currentUser = useAuthStore(s => s.user)
     const canEditPagu = currentUser?.Permissions?.includes('anggaran:update')
+    const canDeleteNode = currentUser?.Permissions?.includes('anggaran:delete')
     const canReadDokumen = currentUser?.Permissions?.includes('dokumen:read')
 
     return (
@@ -109,7 +110,7 @@ function FolderRow({ node, onClick, onUpload, onEdit, onDelete }: { node: TreeNo
                                 <span>Dokumen</span>
                             </button>
                         )}
-                        {canEditPagu && (
+                        {canDeleteNode && (
                             <button
                                 onClick={(e) => { e.stopPropagation(); onDelete(node); }}
                                 className="inline-flex w-full items-center justify-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-slate-200"

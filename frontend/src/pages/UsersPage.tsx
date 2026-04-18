@@ -278,7 +278,8 @@ export default function UsersPage() {
                                         {[
                                             { id: 'anggaran:create', label: 'Create' },
                                             { id: 'anggaran:read', label: 'Read' },
-                                            { id: 'anggaran:update', label: 'Update' }
+                                            { id: 'anggaran:update', label: 'Update' },
+                                            { id: 'anggaran:delete', label: 'Delete' }
                                         ].map(feat => (
                                             <label key={feat.id} className="flex items-start justify-start gap-3 cursor-pointer group">
                                                 <div className="flex items-center h-5">
