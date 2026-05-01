@@ -1,0 +1,25 @@
+name: keuangan-pusbangkom-storage
+
+services:
+  storage-service:
+    image: ghcr.io/ojanaja/keuangan-pusbangkom-storage-service:latest
+    container_name: keuangan-storage-service
+    restart: always
+    ports:
+      - "50051:50051"
+    environment:
+      STORAGE_BASE_PATH: /app/data
+    volumes:
+      - /share/CACHEDEV1_DATA/Public/keuangan-pusbgankomsdackps/kas_storage_shared:/app/data
+    mem_limit: 256m
+    cpus: 1.0
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: keuangan-storage-watchtower
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --interval 300 --cleanup --include-restarting keuangan-storage-service
+    mem_limit: 64m
+    cpus: 0.10
