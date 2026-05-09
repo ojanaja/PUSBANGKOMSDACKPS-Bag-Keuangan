@@ -17,7 +17,7 @@ export interface APIAnggaranNode {
     sisa_anggaran: string
     level: number
     path: string[]
-    source: string
+    source?: string
 }
 
 export interface TreeNode {
@@ -51,7 +51,7 @@ export function buildTree(rows: APIAnggaranNode[]): TreeNode[] {
             realisasi_sd_periode: parseFloat(row.realisasi_sd_periode) || 0,
             persentase_realisasi: parseFloat(row.persentase_realisasi) || 0,
             sisa_anggaran: parseFloat(row.sisa_anggaran) || 0,
-            source: row.source,
+            source: row.source || 'fa_detail',
             children: []
         }
 
@@ -72,7 +72,7 @@ export function buildTree(rows: APIAnggaranNode[]): TreeNode[] {
             }
         }
 
-        const parentIdStr = typeof row.parent_id === 'string' ? row.parent_id : (row.parent_id as unknown as { String?: string })?.String
+        const parentIdStr = typeof row.parent_id === 'string' ? row.parent_id : (row.parent_id as unknown as { String?: string })?.String || ''
         const parent = map.get(parentIdStr)
         if (parent) {
             parent.children!.push(node)
