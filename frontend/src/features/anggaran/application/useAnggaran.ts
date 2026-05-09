@@ -17,6 +17,7 @@ export interface APIAnggaranNode {
     sisa_anggaran: string
     level: number
     path: string[]
+    source: string
 }
 
 export interface TreeNode {
@@ -30,6 +31,7 @@ export interface TreeNode {
     realisasi_sd_periode: number
     persentase_realisasi: number
     sisa_anggaran: number
+    source: string
     children?: TreeNode[]
 }
 
@@ -49,18 +51,19 @@ export function buildTree(rows: APIAnggaranNode[]): TreeNode[] {
             realisasi_sd_periode: parseFloat(row.realisasi_sd_periode) || 0,
             persentase_realisasi: parseFloat(row.persentase_realisasi) || 0,
             sisa_anggaran: parseFloat(row.sisa_anggaran) || 0,
+            source: row.source,
             children: []
         }
 
         map.set(node.id, node)
 
-        if (!row.parent_id || row.parent_id === '00000000-0000-0000-0000-000000000000' || !(row.parent_id as any)?.Valid) {
+        if (!row.parent_id || row.parent_id === '00000000-0000-0000-0000-000000000000' || !(row.parent_id as unknown as { Valid?: boolean })?.Valid) {
             let isRoot = true
             if (typeof row.parent_id === 'string' && row.parent_id !== '00000000-0000-0000-0000-000000000000' && row.parent_id !== '') {
                 isRoot = false
-            } else if (typeof row.parent_id === 'object' && row.parent_id !== null && (row.parent_id as any).Valid) {
+            } else if (typeof row.parent_id === 'object' && row.parent_id !== null && (row.parent_id as unknown as { Valid?: boolean }).Valid) {
                 isRoot = false
-                row.parent_id = (row.parent_id as any).String
+                row.parent_id = (row.parent_id as unknown as { String?: string }).String || null
             }
 
             if (isRoot) {
@@ -69,7 +72,7 @@ export function buildTree(rows: APIAnggaranNode[]): TreeNode[] {
             }
         }
 
-        let parentIdStr = typeof row.parent_id === 'string' ? row.parent_id : (row.parent_id as any)?.String
+        const parentIdStr = typeof row.parent_id === 'string' ? row.parent_id : (row.parent_id as unknown as { String?: string })?.String
         const parent = map.get(parentIdStr)
         if (parent) {
             parent.children!.push(node)

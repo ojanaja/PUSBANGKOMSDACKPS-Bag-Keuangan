@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Upload, ChevronRight, X, RefreshCw, AlertCircle, Loader2, FolderKanban, FileText, Database, Eye, ExternalLink, Edit2, Trash2, User, Clock, Download, Lock } from 'lucide-react'
+import { Upload, ChevronRight, X, RefreshCw, AlertCircle, Loader2, FolderKanban, FileText, Database, Eye, ExternalLink, Edit2, Trash2, User, Clock, Lock } from 'lucide-react'
 import { useAnggaran, useAnggaranDokumen, useAnggaranSnapshots, type TreeNode } from '@/features/anggaran/application/useAnggaran'
 import FileDropzone from '@/components/common/FileDropzone'
 import EditPaguModal from '@/features/anggaran/components/EditPaguModal'
@@ -151,11 +151,12 @@ export default function AnggaranPage() {
     const [showImportModal, setShowImportModal] = useState(false)
     const [tahun, setTahun] = useState(new Date().getFullYear())
     const [bulan, setBulan] = useState(new Date().getMonth() + 1)
+    const [source, setSource] = useState<string>('fa_detail,emon,rkks')
     const [revisi, setRevisi] = useState<string>('')
     const [currentPathIds, setCurrentPathIds] = useState<string[]>([])
     const [uploadTarget, setUploadTarget] = useState<TreeNode | null>(null)
     const [editTarget, setEditTarget] = useState<TreeNode | null>(null)
-    const [editingDoc, setEditingDoc] = useState<{id: string, original_name: string} | null>(null)
+    const [editingDoc, setEditingDoc] = useState<{ id: string, original_name: string } | null>(null)
     const [deleteDocTarget, setDeleteDocTarget] = useState<string | null>(null)
     const [deleteNodeTarget, setDeleteNodeTarget] = useState<TreeNode | null>(null)
 
@@ -190,7 +191,7 @@ export default function AnggaranPage() {
         }
     }
 
-    const { query, previewMutation, confirmImportMutation, updatePaguMutation, updateLockPaguMutation, uploadBuktiMutation, createSnapshotMutation, updateDokumenMutation, deleteDokumenMutation, deleteNodeMutation } = useAnggaran(tahun, derivedPeriode, 'fa_detail,emon')
+    const { query, previewMutation, confirmImportMutation, updatePaguMutation, updateLockPaguMutation, uploadBuktiMutation, createSnapshotMutation, updateDokumenMutation, deleteDokumenMutation, deleteNodeMutation } = useAnggaran(tahun, derivedPeriode, source)
     const { data: uploadDocuments = [], refetch: refetchDocuments, isLoading: loadingDocs } = useAnggaranDokumen(uploadTarget?.id || null)
 
     const canUpdateDokumen = currentUser?.Permissions?.includes('dokumen:update')
@@ -202,7 +203,7 @@ export default function AnggaranPage() {
             await deleteDokumenMutation.mutateAsync(deleteDocTarget)
             showToast('Dokumen berhasil dihapus', 'success')
             refetchDocuments()
-        } catch (e) {
+        } catch {
             showToast('Gagal menghapus dokumen', 'error')
         } finally {
             setDeleteDocTarget(null)
@@ -214,7 +215,7 @@ export default function AnggaranPage() {
         try {
             await deleteNodeMutation.mutateAsync(deleteNodeTarget.id)
             showToast('Akun/Rincian berhasil dihapus', 'success')
-        } catch (e) {
+        } catch {
             showToast('Gagal menghapus akun', 'error')
         } finally {
             setDeleteNodeTarget(null)
@@ -229,7 +230,7 @@ export default function AnggaranPage() {
             showToast('Nama dokumen berhasil diperbarui', 'success')
             refetchDocuments()
             setEditingDoc(null)
-        } catch (e) {
+        } catch {
             showToast('Gagal memperbarui nama dokumen', 'error')
         }
     }
@@ -238,14 +239,23 @@ export default function AnggaranPage() {
     const loading = query.isLoading
     const error = query.error instanceof Error ? query.error.message : null
 
-    const totalPagu = tree.reduce((sum, p) => sum + p.pagu_revisi, 0)
-    const totalRealisasi = tree.reduce((sum, p) => sum + p.realisasi_sd_periode, 0)
-    const totalSisa = tree.reduce((sum, p) => sum + p.sisa_anggaran, 0)
+    const rkksNodes = tree.filter(n => n.source === 'rkks')
+    const faNodes = tree.filter(n => n.source === 'fa_detail' || n.source === 'emon')
+    
+    // Default fallback to all nodes if we don't have separate sources
+    const paguSourceNodes = rkksNodes.length > 0 ? rkksNodes : tree
+    const realisasiSourceNodes = faNodes.length > 0 ? faNodes : tree
+
+    const totalPagu = paguSourceNodes.reduce((sum, p) => sum + p.pagu_revisi, 0)
+    const totalRealisasi = realisasiSourceNodes.reduce((sum, p) => sum + p.realisasi_sd_periode, 0)
+    const totalSisa = totalPagu - totalRealisasi
 
 
+
+    const displayTree = source === 'fa_detail,emon,rkks' ? tree.filter(n => n.source !== 'rkks') : tree;
 
     const currentPath: TreeNode[] = []
-    let currLevelNodes = tree
+    let currLevelNodes = displayTree
     for (const id of currentPathIds) {
         const found = currLevelNodes.find(n => n.id === id)
         if (found) {
@@ -276,6 +286,21 @@ export default function AnggaranPage() {
                             {FISCAL_YEAR_OPTIONS.map(y => (
                                 <option key={y} value={y}>{y}</option>
                             ))}
+                        </select>
+
+                        <select
+                            value={source}
+                            onChange={(e) => {
+                                setSource(e.target.value);
+                                queryClient.invalidateQueries({ queryKey: ['anggaran'] });
+                                setCurrentPathIds([]);
+                            }}
+                            className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white font-medium"
+                            title="Sumber Data"
+                        >
+                            <option value="fa_detail,emon">FA Detail</option>
+                            <option value="rkks">RKKS</option>
+                            <option value="fa_detail,emon,rkks">Gabungan</option>
                         </select>
 
                         <select
@@ -331,14 +356,6 @@ export default function AnggaranPage() {
 
                     {canCreate && (
                         <>
-                            <a
-                                href="/templates/template_anggaran.xlsx"
-                                download
-                                className="inline-flex items-center gap-2 px-4 py-2.5 border border-emerald-200 text-emerald-700 bg-emerald-50 rounded-lg text-sm font-medium hover:bg-emerald-100 transition-colors shadow-sm"
-                            >
-                                <Download size={16} />
-                                Download Template
-                            </a>
                             <button
                                 onClick={() => setShowImportModal(true)}
                                 className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors shadow-sm"
@@ -386,7 +403,7 @@ export default function AnggaranPage() {
                     <h2 className="text-lg font-semibold text-slate-800">Daftar Anggaran</h2>
                     {tree.length > 0 && (
                         <span className="text-xs text-slate-400">
-                            {tree.length} baris ditampilkan
+                            {displayTree.length} baris ditampilkan
                         </span>
                     )}
                 </div>
@@ -425,7 +442,7 @@ export default function AnggaranPage() {
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {(() => {
-                                    const currentNodes = currentPath.length === 0 ? tree : currentPath[currentPath.length - 1].children || []
+                                    const currentNodes = currentPath.length === 0 ? displayTree : currentPath[currentPath.length - 1].children || []
                                     if (currentNodes.length === 0) {
                                         return (
                                             <tr>
