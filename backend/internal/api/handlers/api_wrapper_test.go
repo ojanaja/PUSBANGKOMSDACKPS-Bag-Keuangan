@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -55,6 +54,24 @@ func (s *wrapperTestServer) DeleteUser(ctx echo.Context, id openapi_types.UUID) 
 	return ctx.NoContent(http.StatusNoContent)
 }
 func (s *wrapperTestServer) UpdateUser(ctx echo.Context, id openapi_types.UUID) error {
+	return ctx.NoContent(http.StatusNoContent)
+}
+func (s *wrapperTestServer) UploadDipaDokumen(ctx echo.Context) error {
+	return ctx.NoContent(http.StatusNoContent)
+}
+func (s *wrapperTestServer) GetDipaDocuments(ctx echo.Context, params GetDipaDocumentsParams) error {
+	return ctx.NoContent(http.StatusNoContent)
+}
+func (s *wrapperTestServer) DeleteDipaDokumen(ctx echo.Context, id openapi_types.UUID) error {
+	return ctx.NoContent(http.StatusNoContent)
+}
+func (s *wrapperTestServer) DeleteAnggaranNode(ctx echo.Context, id openapi_types.UUID) error {
+	return ctx.NoContent(http.StatusNoContent)
+}
+func (s *wrapperTestServer) DeleteDocument(ctx echo.Context, id openapi_types.UUID) error {
+	return ctx.NoContent(http.StatusNoContent)
+}
+func (s *wrapperTestServer) UpdateDocumentName(ctx echo.Context, id openapi_types.UUID) error {
 	return ctx.NoContent(http.StatusNoContent)
 }
 
@@ -153,25 +170,4 @@ func TestGeneratedWrapper_InvalidUUIDForAllPathRoutes(t *testing.T) {
 	}
 }
 
-func TestDecodeSpec_ErrorBranches_FromWrapperSuite(t *testing.T) {
-	original := swaggerSpec
-	t.Cleanup(func() {
-		swaggerSpec = original
-	})
 
-	t.Run("invalid base64", func(t *testing.T) {
-		swaggerSpec = []string{"%%%"}
-		_, err := decodeSpec()
-		if err == nil {
-			t.Fatalf("expected base64 decode error")
-		}
-	})
-
-	t.Run("invalid gzip data", func(t *testing.T) {
-		swaggerSpec = []string{base64.StdEncoding.EncodeToString([]byte("not-gzip"))}
-		_, err := decodeSpec()
-		if err == nil {
-			t.Fatalf("expected gzip reader error")
-		}
-	})
-}

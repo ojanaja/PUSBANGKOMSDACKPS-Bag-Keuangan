@@ -30,8 +30,15 @@ func (h *Handler) DownloadDocument(ctx echo.Context, id openapi_types.UUID) erro
 			mimeType = anggaranDoc.MimeType
 			originalName = anggaranDoc.OriginalName
 		} else {
-			slog.Error("Document not found in both tables", "id", id, "err_doc", err, "err_anggaran", aErr)
-			return ctx.JSON(http.StatusNotFound, map[string]string{"message": "document not found"})
+			dipaDoc, dErr := h.queries.GetDipaDokumenByID(ctx.Request().Context(), pgId)
+			if dErr == nil {
+				fileHashSha256 = dipaDoc.FileHashSha256
+				mimeType = dipaDoc.MimeType
+				originalName = dipaDoc.OriginalName
+			} else {
+				slog.Error("Document not found in any table", "id", id, "err_doc", err, "err_anggaran", aErr, "err_dipa", dErr)
+				return ctx.JSON(http.StatusNotFound, map[string]string{"message": "document not found"})
+			}
 		}
 	}
 

@@ -227,6 +227,21 @@ type GetAnggaranTreeParams struct {
 	Source *string `form:"source,omitempty" json:"source,omitempty"`
 }
 
+// GetDipaDocumentsParams defines parameters for GetDipaDocuments.
+type GetDipaDocumentsParams struct {
+	Tahun  int  `form:"tahun" json:"tahun"`
+	Bulan  *int `form:"bulan,omitempty" json:"bulan,omitempty"`
+	Revisi *int `form:"revisi,omitempty" json:"revisi,omitempty"`
+}
+
+// UploadDipaDokumenMultipartBody defines parameters for UploadDipaDokumen.
+type UploadDipaDokumenMultipartBody struct {
+	File          openapi_types.File `json:"file"`
+	TahunAnggaran int                `json:"tahun_anggaran"`
+	Bulan         int                `json:"bulan"`
+	Revisi        int                `json:"revisi"`
+}
+
 // UploadBuktiAnggaranMultipartBody defines parameters for UploadBuktiAnggaran.
 type UploadBuktiAnggaranMultipartBody struct {
 	File   openapi_types.File `json:"file"`
@@ -267,6 +282,15 @@ type ServerInterface interface {
 	// Import Anggaran data from Excel/CSV
 	// (POST /anggaran/import)
 	ImportAnggaranData(ctx echo.Context) error
+	// Upload a DIPA/RKKS PDF document
+	// (POST /anggaran/dipa/upload)
+	UploadDipaDokumen(ctx echo.Context) error
+	// List DIPA/RKKS documents with optional filters
+	// (GET /anggaran/dipa/documents)
+	GetDipaDocuments(ctx echo.Context, params GetDipaDocumentsParams) error
+	// Delete a DIPA/RKKS document by ID
+	// (DELETE /anggaran/dipa/documents/{id})
+	DeleteDipaDokumen(ctx echo.Context, id openapi_types.UUID) error
 	// Create a snapshot of the current anggaran state
 	// (POST /anggaran/snapshot)
 	CreateAnggaranSnapshot(ctx echo.Context) error
@@ -398,6 +422,69 @@ func (w *ServerInterfaceWrapper) GetAnggaranTree(ctx echo.Context) error {
 
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.GetAnggaranTree(ctx, params)
+	return err
+}
+
+// UploadDipaDokumen converts echo context to params.
+func (w *ServerInterfaceWrapper) UploadDipaDokumen(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(CookieAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.UploadDipaDokumen(ctx)
+	return err
+}
+
+// GetDipaDocuments converts echo context to params.
+func (w *ServerInterfaceWrapper) GetDipaDocuments(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(CookieAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetDipaDocumentsParams
+	// ------------- Required query parameter "tahun" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "tahun", ctx.QueryParams(), &params.Tahun, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter tahun: %s", err))
+	}
+
+	// ------------- Optional query parameter "bulan" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "bulan", ctx.QueryParams(), &params.Bulan, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter bulan: %s", err))
+	}
+
+	// ------------- Optional query parameter "revisi" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "revisi", ctx.QueryParams(), &params.Revisi, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter revisi: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetDipaDocuments(ctx, params)
+	return err
+}
+
+// DeleteDipaDokumen converts echo context to params.
+func (w *ServerInterfaceWrapper) DeleteDipaDokumen(ctx echo.Context) error {
+	var err error
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", ctx.Param("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter id: %s", err))
+	}
+
+	ctx.Set(CookieAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.DeleteDipaDokumen(ctx, id)
 	return err
 }
 
@@ -643,6 +730,9 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 	}
 
 	router.POST(baseURL+"/anggaran/import", wrapper.ImportAnggaranData)
+	router.POST(baseURL+"/anggaran/dipa/upload", wrapper.UploadDipaDokumen)
+	router.GET(baseURL+"/anggaran/dipa/documents", wrapper.GetDipaDocuments)
+	router.DELETE(baseURL+"/anggaran/dipa/documents/:id", wrapper.DeleteDipaDokumen)
 	router.POST(baseURL+"/anggaran/snapshot", wrapper.CreateAnggaranSnapshot)
 	router.GET(baseURL+"/anggaran/snapshots", wrapper.GetAnggaranSnapshots)
 	router.GET(baseURL+"/anggaran/tree", wrapper.GetAnggaranTree)
