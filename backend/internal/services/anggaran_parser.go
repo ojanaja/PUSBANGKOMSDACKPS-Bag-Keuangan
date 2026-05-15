@@ -49,7 +49,7 @@ func ParseAnggaranCSVStream(r io.Reader, handle func(AnggaranNodeImport) error) 
 		}
 		lineNum++
 
-		if len(record) < 10 {
+		if len(record) < 2 {
 			continue
 		}
 

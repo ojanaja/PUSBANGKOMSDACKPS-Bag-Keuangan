@@ -88,40 +88,38 @@ function FolderRow({ node, onClick, onUpload, onEdit, onDelete }: { node: TreeNo
                 {formatCurrency(node.sisa_anggaran)}
             </td>
             <td className="px-6 py-5 text-center border-b border-slate-100 align-top">
-                {!hasChildren && (
-                    <div className="flex flex-col items-center gap-2">
-                        {canEditPagu && (
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onEdit(node); }}
-                                className="inline-flex w-full items-center justify-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors border border-slate-200"
-                                title="Edit Pagu & Realisasi"
-                            >
-                                <Edit2 size={16} />
-                                <span>Edit Data</span>
-                            </button>
-                        )}
-                        {canReadDokumen && (
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onUpload(node); }}
-                                className="inline-flex w-full items-center justify-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors border border-slate-200"
-                                title="Unggah dokumen bukti"
-                            >
-                                <Upload size={16} />
-                                <span>Dokumen</span>
-                            </button>
-                        )}
-                        {canDeleteNode && (
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onDelete(node); }}
-                                className="inline-flex w-full items-center justify-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-slate-200"
-                                title="Hapus Akun/Rincian"
-                            >
-                                <Trash2 size={16} />
-                                <span>Hapus</span>
-                            </button>
-                        )}
-                    </div>
-                )}
+                <div className="flex flex-col items-center gap-2">
+                    {canEditPagu && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onEdit(node); }}
+                            className="inline-flex w-full items-center justify-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors border border-slate-200"
+                            title="Edit Pagu & Realisasi"
+                        >
+                            <Edit2 size={16} />
+                            <span>Edit Data</span>
+                        </button>
+                    )}
+                    {canReadDokumen && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onUpload(node); }}
+                            className="inline-flex w-full items-center justify-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors border border-slate-200"
+                            title="Unggah dokumen bukti"
+                        >
+                            <Upload size={16} />
+                            <span>Dokumen</span>
+                        </button>
+                    )}
+                    {canDeleteNode && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onDelete(node); }}
+                            className="inline-flex w-full items-center justify-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-slate-200"
+                            title="Hapus Akun/Rincian"
+                        >
+                            <Trash2 size={16} />
+                            <span>Hapus</span>
+                        </button>
+                    )}
+                </div>
             </td>
         </tr>
     )
@@ -251,8 +249,37 @@ export default function AnggaranPage() {
     const totalSisa = totalPagu - totalRealisasi
 
 
+    const displayTree = source === 'fa_detail,emon,rkks' ? tree.filter(n => n.source !== 'rkks').map(node => {
+        // Gabungan mode: merge Pagu from RKKS based on kode
+        const rkksMap = new Map<string, TreeNode>();
+        const populateMap = (nodes: TreeNode[]) => {
+            for (const n of nodes) {
+                rkksMap.set(n.kode, n);
+                if (n.children) populateMap(n.children);
+            }
+        };
+        populateMap(rkksNodes);
 
-    const displayTree = source === 'fa_detail,emon,rkks' ? tree.filter(n => n.source !== 'rkks') : tree;
+        const mergeRkksPagu = (n: TreeNode): TreeNode => {
+            let pagu_revisi = n.pagu_revisi;
+            let lock_pagu = n.lock_pagu;
+            
+            const rkksMatch = rkksMap.get(n.kode);
+            if (rkksMatch) {
+                pagu_revisi = rkksMatch.pagu_revisi;
+                lock_pagu = rkksMatch.lock_pagu;
+            }
+
+            return {
+                ...n,
+                pagu_revisi,
+                lock_pagu,
+                sisa_anggaran: pagu_revisi - n.realisasi_sd_periode,
+                children: n.children ? n.children.map(mergeRkksPagu) : []
+            };
+        };
+        return mergeRkksPagu(node);
+    }) : tree;
 
     const currentPath: TreeNode[] = []
     let currLevelNodes = displayTree
