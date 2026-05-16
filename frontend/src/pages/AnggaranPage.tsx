@@ -255,6 +255,17 @@ export default function AnggaranPage() {
         const populateMap = (nodes: TreeNode[]) => {
             for (const n of nodes) {
                 rkksMap.set(n.kode, n);
+                
+                // Map by the last segment (e.g., "145.12.WA" -> "WA") to match FA Detail's short codes
+                if (n.kode.includes('.')) {
+                    const parts = n.kode.split('.');
+                    const lastPart = parts[parts.length - 1];
+                    // Only set if not already set, to avoid overwriting higher-level nodes if collisions occur
+                    if (!rkksMap.has(lastPart)) {
+                        rkksMap.set(lastPart, n);
+                    }
+                }
+                
                 if (n.children) populateMap(n.children);
             }
         };
