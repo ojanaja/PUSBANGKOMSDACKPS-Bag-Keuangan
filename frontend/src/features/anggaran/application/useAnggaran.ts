@@ -205,8 +205,7 @@ export function useAnggaran(tahun: number, periode?: string, source?: string) {
 
     const createSnapshotMutation = useMutation({
         mutationFn: async ({ periode }: { periode: string }) => {
-            const { data } = await httpClient.post('/anggaran/snapshot', { periode })
-            return data
+            return apiPost('/anggaran/snapshot', { periode })
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['anggaran_snapshots'] })
@@ -215,8 +214,7 @@ export function useAnggaran(tahun: number, periode?: string, source?: string) {
 
     const rolloverAnggaranMutation = useMutation({
         mutationFn: async () => {
-            const { data } = await httpClient.post('/anggaran/rollover', {})
-            return data
+            return apiPost('/anggaran/rollover', {})
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['anggaran'] })
