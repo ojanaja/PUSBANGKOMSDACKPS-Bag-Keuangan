@@ -249,47 +249,54 @@ export default function AnggaranPage() {
     const totalSisa = totalPagu - totalRealisasi
 
 
-    const displayTree = source === 'fa_detail,emon,rkks' ? tree.filter(n => n.source !== 'rkks').map(node => {
-        // Gabungan mode: merge Pagu from RKKS based on kode
-        const rkksMap = new Map<string, TreeNode>();
-        const populateMap = (nodes: TreeNode[]) => {
+    const displayTree = source === 'fa_detail,emon,rkks' ? tree.filter(n => n.source === 'rkks').map(node => {
+        // Gabungan mode: use RKKS as base tree, merge Realisasi from FA Detail based on kode
+        const faMap = new Map<string, TreeNode>();
+        const populateFaMap = (nodes: TreeNode[]) => {
             for (const n of nodes) {
-                rkksMap.set(n.kode, n);
+                faMap.set(n.kode, n);
                 
-                // Map by the last segment (e.g., "145.12.WA" -> "WA") to match FA Detail's short codes
                 if (n.kode.includes('.')) {
                     const parts = n.kode.split('.');
                     const lastPart = parts[parts.length - 1];
-                    // Only set if not already set, to avoid overwriting higher-level nodes if collisions occur
-                    if (!rkksMap.has(lastPart)) {
-                        rkksMap.set(lastPart, n);
+                    if (!faMap.has(lastPart)) {
+                        faMap.set(lastPart, n);
                     }
                 }
                 
-                if (n.children) populateMap(n.children);
+                if (n.children) populateFaMap(n.children);
             }
         };
-        populateMap(rkksNodes);
+        populateFaMap(faNodes);
 
-        const mergeRkksPagu = (n: TreeNode): TreeNode => {
-            let pagu_revisi = n.pagu_revisi;
-            let lock_pagu = n.lock_pagu;
+        const mergeFaRealisasi = (n: TreeNode): TreeNode => {
+            let realisasi_periode_lalu = n.realisasi_periode_lalu;
+            let realisasi_periode_ini = n.realisasi_periode_ini;
+            let realisasi_sd_periode = n.realisasi_sd_periode;
             
-            const rkksMatch = rkksMap.get(n.kode);
-            if (rkksMatch) {
-                pagu_revisi = rkksMatch.pagu_revisi;
-                lock_pagu = rkksMatch.lock_pagu;
+            let lookupKey = n.kode;
+            if (n.kode.includes('.')) {
+                const parts = n.kode.split('.');
+                lookupKey = parts[parts.length - 1];
+            }
+            
+            const faMatch = faMap.get(lookupKey) || faMap.get(n.kode);
+            if (faMatch) {
+                realisasi_periode_lalu = faMatch.realisasi_periode_lalu;
+                realisasi_periode_ini = faMatch.realisasi_periode_ini;
+                realisasi_sd_periode = faMatch.realisasi_sd_periode;
             }
 
             return {
                 ...n,
-                pagu_revisi,
-                lock_pagu,
-                sisa_anggaran: pagu_revisi - n.realisasi_sd_periode,
-                children: n.children ? n.children.map(mergeRkksPagu) : []
+                realisasi_periode_lalu,
+                realisasi_periode_ini,
+                realisasi_sd_periode,
+                sisa_anggaran: n.pagu_revisi - realisasi_sd_periode,
+                children: n.children ? n.children.map(mergeFaRealisasi) : []
             };
         };
-        return mergeRkksPagu(node);
+        return mergeFaRealisasi(node);
     }) : tree;
 
     const currentPath: TreeNode[] = []
