@@ -157,6 +157,7 @@ export default function AnggaranPage() {
     const [editingDoc, setEditingDoc] = useState<{ id: string, original_name: string } | null>(null)
     const [deleteDocTarget, setDeleteDocTarget] = useState<string | null>(null)
     const [deleteNodeTarget, setDeleteNodeTarget] = useState<TreeNode | null>(null)
+    const [showRolloverConfirm, setShowRolloverConfirm] = useState(false)
 
     // Check if the selected month is the actual current month
     const now = new Date()
@@ -189,11 +190,22 @@ export default function AnggaranPage() {
         }
     }
 
-    const { query, previewMutation, confirmImportMutation, updatePaguMutation, updateLockPaguMutation, uploadBuktiMutation, createSnapshotMutation, updateDokumenMutation, deleteDokumenMutation, deleteNodeMutation } = useAnggaran(tahun, derivedPeriode, source)
+    const { query, previewMutation, confirmImportMutation, updatePaguMutation, updateLockPaguMutation, uploadBuktiMutation, createSnapshotMutation, rolloverAnggaranMutation, updateDokumenMutation, deleteDokumenMutation, deleteNodeMutation } = useAnggaran(tahun, derivedPeriode, source)
     const { data: uploadDocuments = [], refetch: refetchDocuments, isLoading: loadingDocs } = useAnggaranDokumen(uploadTarget?.id || null)
 
     const canUpdateDokumen = currentUser?.Permissions?.includes('dokumen:update')
     const canDeleteDokumen = currentUser?.Permissions?.includes('dokumen:delete')
+
+    const handleRollover = async () => {
+        try {
+            await rolloverAnggaranMutation.mutateAsync()
+            showToast("Berhasil tutup bulan (rollover)", "success")
+        } catch {
+            showToast("Gagal melakukan tutup bulan", "error")
+        } finally {
+            setShowRolloverConfirm(false)
+        }
+    }
 
     const handleDeleteDokumen = async () => {
         if (!deleteDocTarget) return
@@ -396,11 +408,22 @@ export default function AnggaranPage() {
                         title="Perbarui Data"
                     >
                         <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-                        Perbarui Data
+                        Perbarui
                     </button>
 
                     {canCreate && (
                         <>
+                            {derivedPeriode === undefined && (
+                                <button
+                                    onClick={() => setShowRolloverConfirm(true)}
+                                    disabled={rolloverAnggaranMutation.isPending}
+                                    className="inline-flex items-center gap-2 px-4 py-3 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium hover:bg-amber-200 transition-colors shadow-sm border border-amber-200"
+                                    title="Pindahkan Realisasi s.d. Bulan Ini menjadi Bulan Lalu"
+                                >
+                                    {rolloverAnggaranMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Database size={16} />}
+                                    Tutup Bulan
+                                </button>
+                            )}
                             <button
                                 onClick={() => setShowImportModal(true)}
                                 className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors shadow-sm"
@@ -770,6 +793,17 @@ export default function AnggaranPage() {
                 loading={deleteNodeMutation.isPending}
                 onConfirm={handleDeleteNode}
                 onCancel={() => setDeleteNodeTarget(null)}
+            />
+
+            <ConfirmDialog
+                open={showRolloverConfirm}
+                title="Konfirmasi Tutup Bulan"
+                message="Apakah Anda yakin ingin memindahkan seluruh angka 'Realisasi s.d. Bulan Ini' menjadi 'Bulan Lalu' dan mereset 'Bulan Ini' menjadi Rp 0? Tindakan ini akan diterapkan ke seluruh data secara permanen pada basis data utama."
+                confirmLabel="Ya, Tutup Bulan"
+                variant="danger"
+                loading={rolloverAnggaranMutation.isPending}
+                onConfirm={handleRollover}
+                onCancel={() => setShowRolloverConfirm(false)}
             />
         </div >
     )

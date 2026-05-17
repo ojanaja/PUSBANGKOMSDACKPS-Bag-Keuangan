@@ -705,11 +705,45 @@ func (h *Handler) CreateAnggaranSnapshot(ctx echo.Context) error {
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to clear existing snapshot"})
 	}
 
-	err := h.queries.CreateAnggaranSnapshot(ctx.Request().Context(), req.Periode)
-	if err != nil {
+	if err := h.queries.CreateAnggaranSnapshot(ctx.Request().Context(), req.Periode); err != nil {
 		slog.Error("CreateAnggaranSnapshot failed", "error", err)
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to create snapshot"})
 	}
 
 	return ctx.JSON(http.StatusOK, map[string]string{"message": "Snapshot created successfully"})
+}
+
+func (h *Handler) RolloverAnggaran(ctx echo.Context) error {
+	reqCtx := ctx.Request().Context()
+	tx, err := h.pool.Begin(reqCtx)
+	if err != nil {
+		slog.Error("Begin tx failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to begin transaction"})
+	}
+	defer func() {
+		_ = tx.Rollback(reqCtx)
+	}()
+
+	// Perform rollover:
+	// 1. realisasi_periode_lalu = realisasi_sd_periode
+	// 2. realisasi_periode_ini = 0
+	// (sisa_anggaran and realisasi_sd_periode don't need update since they depend on realisasi_periode_ini + realisasi_periode_lalu, 
+	// but we should just set them mathematically to be safe).
+	_, err = tx.Exec(reqCtx, `
+		UPDATE anggaran_node
+		SET realisasi_periode_lalu = realisasi_sd_periode,
+		    realisasi_periode_ini = 0,
+		    sisa_anggaran = pagu_revisi - realisasi_sd_periode
+	`)
+	if err != nil {
+		slog.Error("Rollover update failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to rollover data"})
+	}
+
+	if err := tx.Commit(reqCtx); err != nil {
+		slog.Error("Commit tx failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to save rollover data"})
+	}
+
+	return ctx.JSON(http.StatusOK, map[string]string{"message": "Tutup bulan berhasil dilakukan"})
 }

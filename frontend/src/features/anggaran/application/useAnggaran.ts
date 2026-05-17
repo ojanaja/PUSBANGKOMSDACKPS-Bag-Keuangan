@@ -205,7 +205,21 @@ export function useAnggaran(tahun: number, periode?: string, source?: string) {
 
     const createSnapshotMutation = useMutation({
         mutationFn: async ({ periode }: { periode: string }) => {
-            return apiPost('/anggaran/snapshot', { periode })
+            const { data } = await httpClient.post('/anggaran/snapshot', { periode })
+            return data
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['anggaran_snapshots'] })
+        }
+    })
+
+    const rolloverAnggaranMutation = useMutation({
+        mutationFn: async () => {
+            const { data } = await httpClient.post('/anggaran/rollover', {})
+            return data
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['anggaran'] })
         }
     })
 
@@ -217,6 +231,7 @@ export function useAnggaran(tahun: number, periode?: string, source?: string) {
         updateLockPaguMutation,
         uploadBuktiMutation,
         createSnapshotMutation,
+        rolloverAnggaranMutation,
         updateDokumenMutation: useMutation({
             mutationFn: async ({ documentId, original_name }: { documentId: string, original_name: string }) => {
                 return apiPut(`/documents/${documentId}`, { original_name })

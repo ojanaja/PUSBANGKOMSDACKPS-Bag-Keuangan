@@ -364,6 +364,17 @@ paths:
         '500':
           description: Internal Server Error
 
+  /anggaran/rollover:
+    post:
+      operationId: rolloverAnggaran
+      summary: Perform monthly rollover (Realisasi SD -> Realisasi Lalu, Realisasi Ini -> 0)
+      tags: [Anggaran]
+      responses:
+        '200':
+          description: Rollover completed successfully
+        '500':
+          description: Internal Server Error
+
   /anggaran/{id}/lock:
     put:
       operationId: updateLockPagu
