@@ -22,6 +22,8 @@ export interface APIAnggaranNode {
 
 export interface TreeNode {
     id: string
+    realisasi_node_id?: string
+    dokumen_node_id?: string
     kode: string
     uraian: string
     pagu_revisi: number
@@ -208,7 +210,7 @@ export function useAnggaran(tahun: number, periode?: string, source?: string) {
             return apiPost('/anggaran/snapshot', { periode })
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['anggaran_snapshots'] })
+            queryClient.invalidateQueries({ queryKey: ['anggaran'] })
         }
     })
 

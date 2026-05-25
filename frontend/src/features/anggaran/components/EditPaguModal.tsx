@@ -27,21 +27,35 @@ export default function EditPaguModal({ node, onClose, updatePaguMutation, updat
         setError(null)
 
         try {
-            // Kita bisa menjalankan kedua mutasi secara paralel (hanya mengubah apa yang diperlukan, tapi UI saat ini mengirim keduanya sekalian)
-            await Promise.all([
+            const realisasiNodeId = node.realisasi_node_id || node.id
+            const realisasiData = {
+                realisasi_periode_lalu: lockActive ? '0' : realisasiLalu,
+                realisasi_periode_ini: lockActive ? '0' : realisasiIni
+            }
+            const paguData = {
+                pagu_revisi: paguRevisi,
+                ...(realisasiNodeId === node.id ? realisasiData : {})
+            }
+
+            const updates = [
                 updatePaguMutation.mutateAsync({
                     id: node.id,
-                    data: {
-                        pagu_revisi: paguRevisi,
-                        realisasi_periode_lalu: lockActive ? '0' : realisasiLalu,
-                        realisasi_periode_ini: lockActive ? '0' : realisasiIni
-                    }
+                    data: paguData
                 }),
                 updateLockPaguMutation.mutateAsync({
                     id: node.id,
                     lock_pagu: lockPagu
                 })
-            ])
+            ]
+
+            if (realisasiNodeId !== node.id) {
+                updates.push(updatePaguMutation.mutateAsync({
+                    id: realisasiNodeId,
+                    data: realisasiData
+                }))
+            }
+
+            await Promise.all(updates)
             showToast('Berhasil mengubah nilai anggaran & lock pagu', 'success')
             onClose()
         } catch (e) {

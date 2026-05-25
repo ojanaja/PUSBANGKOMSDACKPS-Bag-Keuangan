@@ -191,7 +191,9 @@ export default function AnggaranPage() {
     }
 
     const { query, previewMutation, confirmImportMutation, updatePaguMutation, updateLockPaguMutation, uploadBuktiMutation, createSnapshotMutation, rolloverAnggaranMutation, updateDokumenMutation, deleteDokumenMutation, deleteNodeMutation } = useAnggaran(tahun, derivedPeriode, source)
-    const { data: uploadDocuments = [], refetch: refetchDocuments, isLoading: loadingDocs } = useAnggaranDokumen(uploadTarget?.id || null)
+    const liveRealisasiQuery = useAnggaran(tahun, undefined, 'fa_detail,emon').query
+    const uploadDocumentNodeId = uploadTarget?.dokumen_node_id || uploadTarget?.realisasi_node_id || uploadTarget?.id || null
+    const { data: uploadDocuments = [], refetch: refetchDocuments, isLoading: loadingDocs } = useAnggaranDokumen(uploadDocumentNodeId)
 
     const canUpdateDokumen = currentUser?.Permissions?.includes('dokumen:update')
     const canDeleteDokumen = currentUser?.Permissions?.includes('dokumen:delete')
@@ -251,65 +253,99 @@ export default function AnggaranPage() {
 
     const rkksNodes = tree.filter(n => n.source === 'rkks')
     const faNodes = tree.filter(n => n.source === 'fa_detail' || n.source === 'emon')
+    const liveFaNodes = source === 'fa_detail,emon,rkks' ? (liveRealisasiQuery.data || []).filter(n => n.source === 'fa_detail' || n.source === 'emon') : faNodes
     
     // Default fallback to all nodes if we don't have separate sources
     const paguSourceNodes = rkksNodes.length > 0 ? rkksNodes : tree
-    const realisasiSourceNodes = faNodes.length > 0 ? faNodes : tree
+    const realisasiSourceNodes = liveFaNodes.length > 0 ? liveFaNodes : faNodes.length > 0 ? faNodes : tree
 
     const totalPagu = paguSourceNodes.reduce((sum, p) => sum + p.pagu_revisi, 0)
     const totalRealisasi = realisasiSourceNodes.reduce((sum, p) => sum + p.realisasi_sd_periode, 0)
     const totalSisa = totalPagu - totalRealisasi
 
 
-    const displayTree = source === 'fa_detail,emon,rkks' ? tree.filter(n => n.source === 'rkks').map(node => {
-        // Gabungan mode: use RKKS as base tree, merge Realisasi from FA Detail based on kode
-        const faMap = new Map<string, TreeNode>();
-        const populateFaMap = (nodes: TreeNode[]) => {
-            for (const n of nodes) {
-                faMap.set(n.kode, n);
-                
-                if (n.kode.includes('.')) {
-                    const parts = n.kode.split('.');
-                    const lastPart = parts[parts.length - 1];
-                    if (!faMap.has(lastPart)) {
-                        faMap.set(lastPart, n);
-                    }
-                }
-                
-                if (n.children) populateFaMap(n.children);
-            }
-        };
-        populateFaMap(faNodes);
+    const displayTree = (() => {
+        if (source !== 'fa_detail,emon,rkks') return tree
 
-        const mergeFaRealisasi = (n: TreeNode): TreeNode => {
-            let realisasi_periode_lalu = n.realisasi_periode_lalu;
-            let realisasi_periode_ini = n.realisasi_periode_ini;
-            let realisasi_sd_periode = n.realisasi_sd_periode;
-            
-            let lookupKey = n.kode;
-            if (n.kode.includes('.')) {
-                const parts = n.kode.split('.');
-                lookupKey = parts[parts.length - 1];
+        const byExactCode = new Map<string, TreeNode[]>()
+        const byLastSegment = new Map<string, TreeNode[]>()
+        const byPathSuffix = new Map<string, TreeNode[]>()
+
+        const addIndex = (map: Map<string, TreeNode[]>, key: string, node: TreeNode) => {
+            if (!key) return
+            const existing = map.get(key) || []
+            existing.push(node)
+            map.set(key, existing)
+        }
+
+        const normalizeCode = (value: string) => value.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+
+        const populateFaIndex = (nodes: TreeNode[], path: string[] = []) => {
+            for (const n of nodes) {
+                const normalizedCode = normalizeCode(n.kode)
+                const segments = n.kode.split('.').filter(Boolean)
+                const lastSegment = normalizeCode(segments[segments.length - 1] || n.kode)
+                const nextPath = [...path, n.kode]
+
+                addIndex(byExactCode, normalizedCode, n)
+                addIndex(byLastSegment, lastSegment, n)
+
+                for (let size = 1; size <= nextPath.length; size += 1) {
+                    const suffix = nextPath.slice(nextPath.length - size).map(normalizeCode).join('/')
+                    addIndex(byPathSuffix, suffix, n)
+                }
+
+                if (n.children) populateFaIndex(n.children, nextPath)
             }
-            
-            const faMatch = faMap.get(lookupKey) || faMap.get(n.kode);
-            if (faMatch) {
-                realisasi_periode_lalu = faMatch.realisasi_periode_lalu;
-                realisasi_periode_ini = faMatch.realisasi_periode_ini;
-                realisasi_sd_periode = faMatch.realisasi_sd_periode;
+        }
+
+        const unique = (nodes: TreeNode[] | undefined) => {
+            if (!nodes || nodes.length !== 1) return null
+            return nodes[0]
+        }
+
+        const findFaMatch = (node: TreeNode, path: string[]) => {
+            const normalizedCode = normalizeCode(node.kode)
+            const parentCode = normalizeCode(path[path.length - 2] || '')
+            const contextualCandidates = [
+                path.map(normalizeCode).join('/'),
+                path.slice(-2).map(normalizeCode).join('/'),
+                parentCode ? `${parentCode}/${normalizedCode}` : '',
+                parentCode ? `${parentCode}0${normalizedCode}` : '',
+                parentCode ? `${parentCode}${normalizedCode}` : '',
+            ]
+
+            for (const key of contextualCandidates) {
+                const match = unique(byPathSuffix.get(key)) || unique(byExactCode.get(key))
+                if (match) return match
             }
+
+            return unique(byExactCode.get(normalizedCode)) || unique(byLastSegment.get(normalizedCode))
+        }
+
+        populateFaIndex(liveFaNodes.length > 0 ? liveFaNodes : faNodes)
+
+        const mergeFaRealisasi = (n: TreeNode, path: string[] = []): TreeNode => {
+            const nextPath = [...path, n.kode]
+            const faMatch = findFaMatch(n, nextPath)
+            const realisasi_periode_lalu = faMatch?.realisasi_periode_lalu ?? n.realisasi_periode_lalu
+            const realisasi_periode_ini = faMatch?.realisasi_periode_ini ?? n.realisasi_periode_ini
+            const realisasi_sd_periode = faMatch?.realisasi_sd_periode ?? n.realisasi_sd_periode
 
             return {
                 ...n,
+                realisasi_node_id: faMatch?.id,
+                dokumen_node_id: faMatch?.id,
                 realisasi_periode_lalu,
                 realisasi_periode_ini,
                 realisasi_sd_periode,
                 sisa_anggaran: n.pagu_revisi - realisasi_sd_periode,
-                children: n.children ? n.children.map(mergeFaRealisasi) : []
-            };
-        };
-        return mergeFaRealisasi(node);
-    }) : tree;
+                children: n.children ? n.children.map(child => mergeFaRealisasi(child, nextPath)) : []
+            }
+        }
+
+        return tree.filter(n => n.source === 'rkks').map(node => mergeFaRealisasi(node))
+    })();
 
     const currentPath: TreeNode[] = []
     let currLevelNodes = displayTree
@@ -413,17 +449,15 @@ export default function AnggaranPage() {
 
                     {canCreate && (
                         <>
-                            {derivedPeriode === undefined && (
-                                <button
-                                    onClick={() => setShowRolloverConfirm(true)}
-                                    disabled={rolloverAnggaranMutation.isPending}
-                                    className="inline-flex items-center gap-2 px-4 py-3 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium hover:bg-amber-200 transition-colors shadow-sm border border-amber-200"
-                                    title="Pindahkan Realisasi s.d. Bulan Ini menjadi Bulan Lalu"
-                                >
-                                    {rolloverAnggaranMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Database size={16} />}
-                                    Tutup Bulan
-                                </button>
-                            )}
+                            <button
+                                onClick={() => setShowRolloverConfirm(true)}
+                                disabled={rolloverAnggaranMutation.isPending}
+                                className="inline-flex items-center gap-2 px-4 py-3 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium hover:bg-amber-200 transition-colors shadow-sm border border-amber-200"
+                                title="Pindahkan Realisasi s.d. Bulan Ini menjadi Bulan Lalu"
+                            >
+                                {rolloverAnggaranMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Database size={16} />}
+                                Tutup Bulan
+                            </button>
                             <button
                                 onClick={() => setShowImportModal(true)}
                                 className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors shadow-sm"
@@ -590,7 +624,7 @@ export default function AnggaranPage() {
                                         onDrop={async (files: File[]) => {
                                             if (files.length > 0) {
                                                 try {
-                                                    await uploadBuktiMutation.mutateAsync({ id: uploadTarget.id, file: files[0] })
+                                                    await uploadBuktiMutation.mutateAsync({ id: uploadDocumentNodeId || uploadTarget.id, file: files[0] })
                                                     showToast('Dokumen berhasil diunggah', 'success')
                                                     refetchDocuments()
                                                 } catch (e) {
