@@ -618,10 +618,56 @@ func (h *Handler) GetAnggaranDokumenByNode(ctx echo.Context, id types.UUID) erro
 	}()
 
 	rows, err := tx.Query(reqCtx, `
-		WITH target_node AS (
+		WITH RECURSIVE target_node AS (
 			SELECT id, kode, uraian, tahun_anggaran, source
 			FROM anggaran_node
 			WHERE id = $1
+		),
+		target_path AS (
+			SELECT id, parent_id, kode, uraian, 1 AS depth
+			FROM anggaran_node
+			WHERE id = $1
+
+			UNION ALL
+
+			SELECT parent.id, parent.parent_id, parent.kode, parent.uraian, target_path.depth + 1
+			FROM anggaran_node parent
+			JOIN target_path ON target_path.parent_id = parent.id
+		),
+		target_signature AS (
+			SELECT string_agg(kode || ':' || lower(trim(uraian)), '/' ORDER BY depth DESC) AS path_signature
+			FROM target_path
+		),
+		owner_path AS (
+			SELECT
+				d.id AS document_id,
+				owner_node.id,
+				owner_node.parent_id,
+				owner_node.kode,
+				owner_node.uraian,
+				1 AS depth
+			FROM anggaran_dokumen_bukti d
+			JOIN anggaran_node owner_node ON owner_node.id = d.anggaran_node_id
+			WHERE d.deleted_at IS NULL
+
+			UNION ALL
+
+			SELECT
+				owner_path.document_id,
+				parent.id,
+				parent.parent_id,
+				parent.kode,
+				parent.uraian,
+				owner_path.depth + 1
+			FROM owner_path
+			JOIN anggaran_node parent ON owner_path.parent_id = parent.id
+		),
+		owner_signature AS (
+			SELECT
+				document_id,
+				string_agg(kode || ':' || lower(trim(uraian)), '/' ORDER BY depth DESC) AS path_signature
+			FROM owner_path
+			GROUP BY document_id
 		)
 		SELECT DISTINCT ON (d.id)
 			d.id, d.anggaran_node_id, d.file_hash_sha256, d.original_name,
@@ -629,18 +675,21 @@ func (h *Handler) GetAnggaranDokumenByNode(ctx echo.Context, id types.UUID) erro
 			COALESCE(NULLIF(u.full_name, ''), u.username, 'User Non-Aktif') as uploaded_by_name
 		FROM anggaran_dokumen_bukti d
 		JOIN anggaran_node owner_node ON owner_node.id = d.anggaran_node_id
+		JOIN owner_signature os ON os.document_id = d.id
 		LEFT JOIN users u ON d.uploaded_by = u.id
 		LEFT JOIN target_node t ON TRUE
+		LEFT JOIN target_signature ts ON TRUE
 		WHERE d.deleted_at IS NULL
 		AND (
 			d.anggaran_node_id = $1
 			OR (
-					t.id IS NOT NULL
-					AND owner_node.tahun_anggaran = t.tahun_anggaran
-					AND owner_node.kode = t.kode
-					AND owner_node.source = t.source
-					AND lower(trim(owner_node.uraian)) = lower(trim(t.uraian))
-				)
+				t.id IS NOT NULL
+				AND owner_node.tahun_anggaran = t.tahun_anggaran
+				AND owner_node.kode = t.kode
+				AND owner_node.source = t.source
+				AND lower(trim(owner_node.uraian)) = lower(trim(t.uraian))
+				AND os.path_signature = ts.path_signature
+			)
 		)
 		ORDER BY d.id, d.created_at DESC
 	`, nodeID)
