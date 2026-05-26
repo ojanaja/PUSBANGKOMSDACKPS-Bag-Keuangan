@@ -635,11 +635,12 @@ func (h *Handler) GetAnggaranDokumenByNode(ctx echo.Context, id types.UUID) erro
 		AND (
 			d.anggaran_node_id = $1
 			OR (
-				t.id IS NOT NULL
-				AND owner_node.tahun_anggaran = t.tahun_anggaran
-				AND owner_node.kode = t.kode
-				AND lower(trim(owner_node.uraian)) = lower(trim(t.uraian))
-			)
+					t.id IS NOT NULL
+					AND owner_node.tahun_anggaran = t.tahun_anggaran
+					AND owner_node.kode = t.kode
+					AND owner_node.source = t.source
+					AND lower(trim(owner_node.uraian)) = lower(trim(t.uraian))
+				)
 		)
 		ORDER BY d.id, d.created_at DESC
 	`, nodeID)
