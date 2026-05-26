@@ -304,7 +304,28 @@ export default function AnggaranPage() {
             return nodes[0]
         }
 
-        const findFaMatch = (node: TreeNode, path: string[]) => {
+        const findInCandidates = (node: TreeNode, candidates?: TreeNode[]) => {
+            if (!candidates || candidates.length === 0) return null
+
+            const normalizedCode = normalizeCode(node.kode)
+            const segments = node.kode.split('.').filter(Boolean)
+            const lastSegment = normalizeCode(segments[segments.length - 1] || node.kode)
+            const exact = candidates.filter(candidate => normalizeCode(candidate.kode) === normalizedCode)
+            if (exact.length === 1) return exact[0]
+
+            const segmentMatch = candidates.filter(candidate => normalizeCode(candidate.kode) === lastSegment || normalizeCode(candidate.kode.split('.').filter(Boolean).pop() || candidate.kode) === lastSegment)
+            if (segmentMatch.length === 1) return segmentMatch[0]
+
+            const suffixMatch = candidates.filter(candidate => normalizeCode(candidate.kode).endsWith(normalizedCode) || normalizeCode(candidate.kode).endsWith(lastSegment))
+            if (suffixMatch.length === 1) return suffixMatch[0]
+
+            return null
+        }
+
+        const findFaMatch = (node: TreeNode, path: string[], parentFaChildren?: TreeNode[]) => {
+            const scopedMatch = findInCandidates(node, parentFaChildren)
+            if (scopedMatch) return scopedMatch
+
             const normalizedCode = normalizeCode(node.kode)
             const parentCode = normalizeCode(path[path.length - 2] || '')
             const contextualCandidates = [
@@ -325,9 +346,9 @@ export default function AnggaranPage() {
 
         populateFaIndex(liveFaNodes.length > 0 ? liveFaNodes : faNodes)
 
-        const mergeFaRealisasi = (n: TreeNode, path: string[] = []): TreeNode => {
+        const mergeFaRealisasi = (n: TreeNode, path: string[] = [], parentFaChildren?: TreeNode[]): TreeNode => {
             const nextPath = [...path, n.kode]
-            const faMatch = findFaMatch(n, nextPath)
+            const faMatch = findFaMatch(n, nextPath, parentFaChildren)
             const realisasi_periode_lalu = faMatch?.realisasi_periode_lalu ?? n.realisasi_periode_lalu
             const realisasi_periode_ini = faMatch?.realisasi_periode_ini ?? n.realisasi_periode_ini
             const realisasi_sd_periode = faMatch?.realisasi_sd_periode ?? n.realisasi_sd_periode
@@ -340,7 +361,7 @@ export default function AnggaranPage() {
                 realisasi_periode_ini,
                 realisasi_sd_periode,
                 sisa_anggaran: n.pagu_revisi - realisasi_sd_periode,
-                children: n.children ? n.children.map(child => mergeFaRealisasi(child, nextPath)) : []
+                children: n.children ? n.children.map(child => mergeFaRealisasi(child, nextPath, faMatch?.children)) : []
             }
         }
 
