@@ -14,6 +14,9 @@ type wrapperTestServer struct{}
 func (s *wrapperTestServer) CreateAnggaranSnapshot(ctx echo.Context) error {
 	return ctx.NoContent(http.StatusNoContent)
 }
+func (s *wrapperTestServer) RolloverAnggaran(ctx echo.Context) error {
+	return ctx.NoContent(http.StatusNoContent)
+}
 func (s *wrapperTestServer) UpdateLockPagu(ctx echo.Context, id openapi_types.UUID) error {
 	return ctx.NoContent(http.StatusNoContent)
 }
@@ -169,5 +172,3 @@ func TestGeneratedWrapper_InvalidUUIDForAllPathRoutes(t *testing.T) {
 		}
 	}
 }
-
-

@@ -541,7 +541,6 @@ func (h *Handler) DeleteAnggaranNode(ctx echo.Context, id types.UUID) error {
 	return ctx.JSON(http.StatusOK, map[string]string{"message": "Anggaran deleted successfully"})
 }
 
-
 func (h *Handler) UploadBuktiAnggaran(ctx echo.Context) error {
 	file, err := ctx.FormFile("file")
 	if err != nil {
@@ -607,25 +606,82 @@ func (h *Handler) UploadBuktiAnggaran(ctx echo.Context) error {
 }
 
 func (h *Handler) GetAnggaranDokumenByNode(ctx echo.Context, id types.UUID) error {
-	rows, err := h.queries.GetAnggaranDokumenByNode(ctx.Request().Context(), uuidToPgUUID(uuid.UUID(id)))
+	reqCtx := ctx.Request().Context()
+	nodeID := uuidToPgUUID(uuid.UUID(id))
+	tx, err := h.pool.Begin(reqCtx)
+	if err != nil {
+		slog.Error("Begin tx failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to get documents"})
+	}
+	defer func() {
+		_ = tx.Rollback(reqCtx)
+	}()
+
+	rows, err := tx.Query(reqCtx, `
+		WITH target_node AS (
+			SELECT id, kode, uraian, tahun_anggaran, source
+			FROM anggaran_node
+			WHERE id = $1
+		)
+		SELECT DISTINCT ON (d.id)
+			d.id, d.anggaran_node_id, d.file_hash_sha256, d.original_name,
+			d.mime_type, d.file_size_bytes, d.uploaded_by, d.created_at,
+			COALESCE(NULLIF(u.full_name, ''), u.username, 'User Non-Aktif') as uploaded_by_name
+		FROM anggaran_dokumen_bukti d
+		JOIN anggaran_node owner_node ON owner_node.id = d.anggaran_node_id
+		LEFT JOIN users u ON d.uploaded_by = u.id
+		LEFT JOIN target_node t ON TRUE
+		WHERE d.deleted_at IS NULL
+		AND (
+			d.anggaran_node_id = $1
+			OR (
+				t.id IS NOT NULL
+				AND owner_node.tahun_anggaran = t.tahun_anggaran
+				AND owner_node.kode = t.kode
+				AND lower(trim(owner_node.uraian)) = lower(trim(t.uraian))
+			)
+		)
+		ORDER BY d.id, d.created_at DESC
+	`, nodeID)
 	if err != nil {
 		slog.Error("GetAnggaranDokumenByNode failed", "error", err)
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to get documents"})
 	}
+	defer rows.Close()
 
-	result := make([]map[string]interface{}, len(rows))
-	for i, r := range rows {
-		result[i] = map[string]interface{}{
-			"id":               uuid.UUID(r.ID.Bytes).String(),
-			"anggaran_node_id": uuid.UUID(r.AnggaranNodeID.Bytes).String(),
-			"file_hash_sha256": r.FileHashSha256,
-			"original_name":    r.OriginalName,
-			"mime_type":        r.MimeType,
-			"file_size_bytes":  r.FileSizeBytes,
-			"created_at":       r.CreatedAt.Time,
-			"uploaded_by":      uuid.UUID(r.UploadedBy.Bytes).String(),
-			"uploaded_by_name": r.UploadedByName,
+	result := make([]map[string]interface{}, 0)
+	for rows.Next() {
+		var docID pgtype.UUID
+		var anggaranNodeID pgtype.UUID
+		var fileHash string
+		var originalName string
+		var mimeType string
+		var fileSize int64
+		var uploadedBy pgtype.UUID
+		var createdAt pgtype.Timestamptz
+		var uploadedByName string
+
+		if err := rows.Scan(&docID, &anggaranNodeID, &fileHash, &originalName, &mimeType, &fileSize, &uploadedBy, &createdAt, &uploadedByName); err != nil {
+			slog.Error("Scan anggaran documents failed", "error", err)
+			return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to read documents"})
 		}
+
+		result = append(result, map[string]interface{}{
+			"id":               uuid.UUID(docID.Bytes).String(),
+			"anggaran_node_id": uuid.UUID(anggaranNodeID.Bytes).String(),
+			"file_hash_sha256": fileHash,
+			"original_name":    originalName,
+			"mime_type":        mimeType,
+			"file_size_bytes":  fileSize,
+			"created_at":       createdAt.Time,
+			"uploaded_by":      uuid.UUID(uploadedBy.Bytes).String(),
+			"uploaded_by_name": uploadedByName,
+		})
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("Iterate anggaran documents failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to read documents"})
 	}
 
 	return ctx.JSON(http.StatusOK, result)
@@ -727,7 +783,7 @@ func (h *Handler) RolloverAnggaran(ctx echo.Context) error {
 	// Perform rollover:
 	// 1. realisasi_periode_lalu = realisasi_sd_periode
 	// 2. realisasi_periode_ini = 0
-	// (sisa_anggaran and realisasi_sd_periode don't need update since they depend on realisasi_periode_ini + realisasi_periode_lalu, 
+	// (sisa_anggaran and realisasi_sd_periode don't need update since they depend on realisasi_periode_ini + realisasi_periode_lalu,
 	// but we should just set them mathematically to be safe).
 	_, err = tx.Exec(reqCtx, `
 		UPDATE anggaran_node
