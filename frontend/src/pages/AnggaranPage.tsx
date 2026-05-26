@@ -191,7 +191,7 @@ export default function AnggaranPage() {
     }
 
     const { query, previewMutation, confirmImportMutation, updatePaguMutation, updateLockPaguMutation, uploadBuktiMutation, createSnapshotMutation, rolloverAnggaranMutation, updateDokumenMutation, deleteDokumenMutation, deleteNodeMutation } = useAnggaran(tahun, derivedPeriode, source)
-    const liveRealisasiQuery = useAnggaran(tahun, undefined, 'fa_detail,emon').query
+    const realisasiQuery = useAnggaran(tahun, derivedPeriode, 'fa_detail,emon').query
     const uploadDocumentNodeId = uploadTarget?.dokumen_node_id || uploadTarget?.realisasi_node_id || uploadTarget?.id || null
     const { data: uploadDocuments = [], refetch: refetchDocuments, isLoading: loadingDocs } = useAnggaranDokumen(uploadDocumentNodeId)
 
@@ -253,11 +253,11 @@ export default function AnggaranPage() {
 
     const rkksNodes = tree.filter(n => n.source === 'rkks')
     const faNodes = tree.filter(n => n.source === 'fa_detail' || n.source === 'emon')
-    const liveFaNodes = source === 'fa_detail,emon,rkks' ? (liveRealisasiQuery.data || []).filter(n => n.source === 'fa_detail' || n.source === 'emon') : faNodes
+    const periodFaNodes = source === 'fa_detail,emon,rkks' ? (realisasiQuery.data || []).filter(n => n.source === 'fa_detail' || n.source === 'emon') : faNodes
     
     // Default fallback to all nodes if we don't have separate sources
     const paguSourceNodes = rkksNodes.length > 0 ? rkksNodes : tree
-    const realisasiSourceNodes = liveFaNodes.length > 0 ? liveFaNodes : faNodes.length > 0 ? faNodes : tree
+    const realisasiSourceNodes = periodFaNodes.length > 0 ? periodFaNodes : faNodes.length > 0 ? faNodes : tree
 
     const totalPagu = paguSourceNodes.reduce((sum, p) => sum + p.pagu_revisi, 0)
     const totalRealisasi = realisasiSourceNodes.reduce((sum, p) => sum + p.realisasi_sd_periode, 0)
@@ -344,7 +344,7 @@ export default function AnggaranPage() {
             return unique(byExactCode.get(normalizedCode)) || unique(byLastSegment.get(normalizedCode))
         }
 
-        populateFaIndex(liveFaNodes.length > 0 ? liveFaNodes : faNodes)
+        populateFaIndex(periodFaNodes.length > 0 ? periodFaNodes : faNodes)
 
         const mergeFaRealisasi = (n: TreeNode, path: string[] = [], parentFaChildren?: TreeNode[]): TreeNode => {
             const nextPath = [...path, n.kode]
