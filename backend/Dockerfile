@@ -18,7 +18,7 @@ RUN if [ -f go.mod ]; then go mod download && go mod verify; fi
 COPY backend/ .
 
 # Install tools required for code generation (sqlc, oapi-codegen)
-RUN go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.26.0 && \
+RUN go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.27.0 && \
     go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.5.1
 
 # Generate DB models and API stubs
