@@ -390,9 +390,17 @@ export default function AnggaranPage() {
         const mergeFaRealisasi = (n: TreeNode, path: string[] = [], parentFaChildren?: TreeNode[]): TreeNode => {
             const nextPath = [...path, n.kode]
             const faMatch = findFaMatch(n, nextPath, parentFaChildren)
-            const realisasi_periode_lalu = faMatch?.realisasi_periode_lalu ?? n.realisasi_periode_lalu
-            const realisasi_periode_ini = faMatch?.realisasi_periode_ini ?? n.realisasi_periode_ini
-            const realisasi_sd_periode = faMatch?.realisasi_sd_periode ?? n.realisasi_sd_periode
+            const children = n.children ? n.children.map(child => mergeFaRealisasi(child, nextPath, faMatch?.children)) : []
+            const childRealisasiPeriodeLalu = children.reduce((sum, child) => sum + child.realisasi_periode_lalu, 0)
+            const childRealisasiPeriodeIni = children.reduce((sum, child) => sum + child.realisasi_periode_ini, 0)
+            const childRealisasiSdPeriode = children.reduce((sum, child) => sum + child.realisasi_sd_periode, 0)
+            const hasChildRealisasi = childRealisasiPeriodeLalu !== 0 || childRealisasiPeriodeIni !== 0 || childRealisasiSdPeriode !== 0
+            const matchedRealisasiPeriodeLalu = faMatch?.realisasi_periode_lalu ?? n.realisasi_periode_lalu
+            const matchedRealisasiPeriodeIni = faMatch?.realisasi_periode_ini ?? n.realisasi_periode_ini
+            const matchedRealisasiSdPeriode = faMatch?.realisasi_sd_periode ?? n.realisasi_sd_periode
+            const realisasi_periode_lalu = hasChildRealisasi ? childRealisasiPeriodeLalu : matchedRealisasiPeriodeLalu
+            const realisasi_periode_ini = hasChildRealisasi ? childRealisasiPeriodeIni : matchedRealisasiPeriodeIni
+            const realisasi_sd_periode = hasChildRealisasi ? childRealisasiSdPeriode : matchedRealisasiSdPeriode
 
             return {
                 ...n,
@@ -402,7 +410,7 @@ export default function AnggaranPage() {
                 realisasi_periode_ini,
                 realisasi_sd_periode,
                 sisa_anggaran: n.pagu_revisi - realisasi_sd_periode,
-                children: n.children ? n.children.map(child => mergeFaRealisasi(child, nextPath, faMatch?.children)) : []
+                children
             }
         }
 
