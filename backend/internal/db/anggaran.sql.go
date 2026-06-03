@@ -75,12 +75,13 @@ const getAnggaranDokumenByNode = `-- name: GetAnggaranDokumenByNode :many
 SELECT 
     d.id, d.anggaran_node_id, d.file_hash_sha256, d.original_name, 
     d.mime_type, d.file_size_bytes, d.uploaded_by, d.created_at, 
-    COALESCE(NULLIF(u.full_name, ''), u.username, 'User Non-Aktif') as uploaded_by_name 
+    COALESCE(NULLIF(u.full_name, ''), u.username, 'User Non-Aktif') as uploaded_by_name,
+    d.sort_order
 FROM anggaran_dokumen_bukti d
 LEFT JOIN users u ON d.uploaded_by = u.id
 WHERE d.anggaran_node_id = $1
 AND d.deleted_at IS NULL
-ORDER BY d.created_at DESC
+ORDER BY d.sort_order ASC, d.created_at ASC, d.original_name ASC
 `
 
 type GetAnggaranDokumenByNodeRow struct {
@@ -93,6 +94,7 @@ type GetAnggaranDokumenByNodeRow struct {
 	UploadedBy     pgtype.UUID        `json:"uploaded_by"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UploadedByName string             `json:"uploaded_by_name"`
+	SortOrder      int32              `json:"sort_order"`
 }
 
 func (q *Queries) GetAnggaranDokumenByNode(ctx context.Context, anggaranNodeID pgtype.UUID) ([]GetAnggaranDokumenByNodeRow, error) {
@@ -114,6 +116,7 @@ func (q *Queries) GetAnggaranDokumenByNode(ctx context.Context, anggaranNodeID p
 			&i.UploadedBy,
 			&i.CreatedAt,
 			&i.UploadedByName,
+			&i.SortOrder,
 		); err != nil {
 			return nil, err
 		}

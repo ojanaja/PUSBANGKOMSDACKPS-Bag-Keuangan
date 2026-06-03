@@ -77,21 +77,22 @@ ORDER BY tanggal_sp2d;
 -- name: InsertAnggaranDokumen :one
 INSERT INTO anggaran_dokumen_bukti (id, anggaran_node_id, file_hash_sha256, original_name, mime_type, file_size_bytes, uploaded_by)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING *;
+RETURNING id, anggaran_node_id, file_hash_sha256, original_name, mime_type, file_size_bytes, uploaded_by, created_at, deleted_at;
 
 -- name: GetAnggaranDokumenByNode :many
 SELECT 
     d.id, d.anggaran_node_id, d.file_hash_sha256, d.original_name, 
     d.mime_type, d.file_size_bytes, d.uploaded_by, d.created_at, 
-    COALESCE(NULLIF(u.full_name, ''), u.username, 'User Non-Aktif') as uploaded_by_name 
+    COALESCE(NULLIF(u.full_name, ''), u.username, 'User Non-Aktif') as uploaded_by_name,
+    d.sort_order
 FROM anggaran_dokumen_bukti d
 LEFT JOIN users u ON d.uploaded_by = u.id
 WHERE d.anggaran_node_id = $1
 AND d.deleted_at IS NULL
-ORDER BY d.created_at DESC;
+ORDER BY d.sort_order ASC, d.created_at ASC, d.original_name ASC;
 
 -- name: GetAnggaranDokumenByID :one
-SELECT * FROM anggaran_dokumen_bukti
+SELECT id, anggaran_node_id, file_hash_sha256, original_name, mime_type, file_size_bytes, uploaded_by, created_at, deleted_at FROM anggaran_dokumen_bukti
 WHERE id = $1 AND deleted_at IS NULL;
 
 -- name: GetAvailableSnapshots :many
@@ -130,7 +131,7 @@ ORDER BY path;
 UPDATE anggaran_dokumen_bukti
 SET original_name = $1
 WHERE id = $2
-RETURNING *;
+RETURNING id, anggaran_node_id, file_hash_sha256, original_name, mime_type, file_size_bytes, uploaded_by, created_at, deleted_at;
 
 -- name: DeleteAnggaranDokumen :exec
 UPDATE anggaran_dokumen_bukti

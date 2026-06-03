@@ -83,7 +83,28 @@ export function buildTree(rows: APIAnggaranNode[]): TreeNode[] {
         }
     }
 
-    return roots
+    const aggregateFromChildren = (node: TreeNode): TreeNode => {
+        const children = node.children?.map(aggregateFromChildren) || []
+        if (children.length === 0) {
+            return { ...node, children }
+        }
+
+        const realisasi_periode_lalu = children.reduce((sum, child) => sum + child.realisasi_periode_lalu, 0)
+        const realisasi_periode_ini = children.reduce((sum, child) => sum + child.realisasi_periode_ini, 0)
+        const realisasi_sd_periode = children.reduce((sum, child) => sum + child.realisasi_sd_periode, 0)
+
+        return {
+            ...node,
+            realisasi_periode_lalu,
+            realisasi_periode_ini,
+            realisasi_sd_periode,
+            persentase_realisasi: node.pagu_revisi > 0 ? (realisasi_sd_periode / node.pagu_revisi) * 100 : 0,
+            sisa_anggaran: node.pagu_revisi - realisasi_sd_periode,
+            children
+        }
+    }
+
+    return roots.map(aggregateFromChildren)
 }
 
 export interface PreviewNode {
@@ -248,6 +269,14 @@ export function useAnggaran(tahun: number, periode?: string, source?: string) {
                  queryClient.invalidateQueries({ queryKey: ['anggaran', 'documents'] })
              }
         }),
+        reorderDokumenMutation: useMutation({
+            mutationFn: async ({ nodeId, documentIds }: { nodeId: string, documentIds: string[] }) => {
+                return apiPost(`/anggaran/${nodeId}/documents/reorder`, { document_ids: documentIds })
+            },
+            onSuccess: () => {
+                queryClient.invalidateQueries({ queryKey: ['anggaran', 'documents'] })
+            }
+        }),
         deleteNodeMutation: useMutation({
             mutationFn: async (nodeId: string) => {
                 return apiDelete(`/anggaran/${nodeId}`)
@@ -269,6 +298,7 @@ export interface AnggaranDokumenItem {
     created_at: string
     uploaded_by: string
     uploaded_by_name: string
+    sort_order?: number
 }
 
 export function useAnggaranDokumen(nodeId: string | null) {

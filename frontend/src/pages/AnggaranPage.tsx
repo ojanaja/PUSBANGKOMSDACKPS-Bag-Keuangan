@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { Upload, ChevronRight, X, RefreshCw, AlertCircle, Loader2, FolderKanban, FileText, Database, Eye, ExternalLink, Edit2, Trash2, User, Clock, Lock } from 'lucide-react'
-import { useAnggaran, useAnggaranDokumen, useAnggaranSnapshots, type TreeNode } from '@/features/anggaran/application/useAnggaran'
+import { useEffect, useState } from 'react'
+import { Upload, ChevronRight, X, RefreshCw, AlertCircle, Loader2, FolderKanban, FileText, Database, Eye, ExternalLink, Edit2, Trash2, User, Clock, Lock, ArrowUp, ArrowDown, Save } from 'lucide-react'
+import { useAnggaran, useAnggaranDokumen, useAnggaranSnapshots, type AnggaranDokumenItem, type TreeNode } from '@/features/anggaran/application/useAnggaran'
 import FileDropzone from '@/components/common/FileDropzone'
 import EditPaguModal from '@/features/anggaran/components/EditPaguModal'
 import ImportPreviewModal from '@/features/anggaran/components/ImportPreviewModal'
@@ -158,6 +158,8 @@ export default function AnggaranPage() {
     const [deleteDocTarget, setDeleteDocTarget] = useState<string | null>(null)
     const [deleteNodeTarget, setDeleteNodeTarget] = useState<TreeNode | null>(null)
     const [showRolloverConfirm, setShowRolloverConfirm] = useState(false)
+    const [isOrderingDocuments, setIsOrderingDocuments] = useState(false)
+    const [documentOrderDraft, setDocumentOrderDraft] = useState<AnggaranDokumenItem[]>([])
 
     // Check if the selected month is the actual current month
     const now = new Date()
@@ -190,13 +192,24 @@ export default function AnggaranPage() {
         }
     }
 
-    const { query, previewMutation, confirmImportMutation, updatePaguMutation, updateLockPaguMutation, uploadBuktiMutation, createSnapshotMutation, rolloverAnggaranMutation, updateDokumenMutation, deleteDokumenMutation, deleteNodeMutation } = useAnggaran(tahun, derivedPeriode, source)
+    const { query, previewMutation, confirmImportMutation, updatePaguMutation, updateLockPaguMutation, uploadBuktiMutation, createSnapshotMutation, rolloverAnggaranMutation, updateDokumenMutation, deleteDokumenMutation, reorderDokumenMutation, deleteNodeMutation } = useAnggaran(tahun, derivedPeriode, source)
     const realisasiQuery = useAnggaran(tahun, derivedPeriode, 'fa_detail,emon').query
     const uploadDocumentNodeId = uploadTarget?.dokumen_node_id || uploadTarget?.realisasi_node_id || uploadTarget?.id || null
     const { data: uploadDocuments = [], refetch: refetchDocuments, isLoading: loadingDocs } = useAnggaranDokumen(uploadDocumentNodeId)
 
     const canUpdateDokumen = currentUser?.Permissions?.includes('dokumen:update')
     const canDeleteDokumen = currentUser?.Permissions?.includes('dokumen:delete')
+
+    useEffect(() => {
+        if (!isOrderingDocuments) {
+            setDocumentOrderDraft(uploadDocuments)
+        }
+    }, [isOrderingDocuments, uploadDocuments])
+
+    useEffect(() => {
+        setIsOrderingDocuments(false)
+        setDocumentOrderDraft([])
+    }, [uploadDocumentNodeId])
 
     const handleRollover = async () => {
         try {
@@ -244,6 +257,34 @@ export default function AnggaranPage() {
             setEditingDoc(null)
         } catch {
             showToast('Gagal memperbarui nama dokumen', 'error')
+        }
+    }
+
+    const moveDocument = (fromIndex: number, direction: -1 | 1) => {
+        const toIndex = fromIndex + direction
+        if (toIndex < 0 || toIndex >= documentOrderDraft.length) return
+
+        setDocumentOrderDraft((current) => {
+            const next = [...current]
+            const item = next[fromIndex]
+            next[fromIndex] = next[toIndex]
+            next[toIndex] = item
+            return next
+        })
+    }
+
+    const handleSaveDocumentOrder = async () => {
+        if (!uploadDocumentNodeId) return
+        try {
+            await reorderDokumenMutation.mutateAsync({
+                nodeId: uploadDocumentNodeId,
+                documentIds: documentOrderDraft.map(doc => doc.id)
+            })
+            showToast('Urutan dokumen berhasil disimpan', 'success')
+            setIsOrderingDocuments(false)
+            refetchDocuments()
+        } catch {
+            showToast('Gagal menyimpan urutan dokumen', 'error')
         }
     }
 
@@ -636,7 +677,7 @@ export default function AnggaranPage() {
 
                             {/* Scrollable Body */}
                             <div className="overflow-y-auto flex-1 px-8 py-6">
-                                {currentUser?.Permissions?.includes('dokumen:create') && (
+                                {currentUser?.Permissions?.includes('dokumen:create') && !isOrderingDocuments && (
                                     <FileDropzone
                                         label="Unggah Dokumen Bukti"
                                         type="document"
@@ -662,9 +703,24 @@ export default function AnggaranPage() {
                                     <div className="flex items-center justify-between mb-4">
                                         <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wider">Daftar Dokumen</h4>
                                         {uploadDocuments.length > 0 && (
-                                            <span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded-full font-medium">
-                                                {uploadDocuments.length} dokumen
-                                            </span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded-full font-medium">
+                                                    {uploadDocuments.length} dokumen
+                                                </span>
+                                                {canUpdateDokumen && !isOrderingDocuments && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setDocumentOrderDraft(uploadDocuments)
+                                                            setIsOrderingDocuments(true)
+                                                        }}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-primary-700 bg-primary-50 border border-primary-100 rounded-lg hover:bg-primary-100 transition-colors"
+                                                    >
+                                                        <ArrowUp size={13} />
+                                                        <ArrowDown size={13} />
+                                                        Atur Urutan
+                                                    </button>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
 
@@ -680,9 +736,30 @@ export default function AnggaranPage() {
                                                 Belum ada dokumen yang diunggah.
                                             </div>
                                         ) : (
-                                            uploadDocuments.map(doc => (
-                                                <div key={doc.id} className="p-4 bg-slate-50 border border-slate-200 rounded-xl group hover:border-primary-300 hover:shadow-sm transition-all">
+                                            (isOrderingDocuments ? documentOrderDraft : uploadDocuments).map((doc, index, docs) => (
+                                                <div key={doc.id} className={`p-4 bg-slate-50 border rounded-xl group hover:border-primary-300 hover:shadow-sm transition-all ${isOrderingDocuments ? 'border-primary-200' : 'border-slate-200'}`}>
                                                     <div className="flex items-start gap-4">
+                                                        {isOrderingDocuments && (
+                                                            <div className="flex flex-col gap-1 shrink-0">
+                                                                <button
+                                                                    onClick={() => moveDocument(index, -1)}
+                                                                    disabled={index === 0}
+                                                                    className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-primary-700 hover:border-primary-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                                                    title="Naikkan dokumen"
+                                                                >
+                                                                    <ArrowUp size={16} />
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => moveDocument(index, 1)}
+                                                                    disabled={index === docs.length - 1}
+                                                                    className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-primary-700 hover:border-primary-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                                                    title="Turunkan dokumen"
+                                                                >
+                                                                    <ArrowDown size={16} />
+                                                                </button>
+                                                            </div>
+                                                        )}
+
                                                         {/* File Icon */}
                                                         <div className="p-2.5 bg-white rounded-lg shadow-sm border border-slate-100 shrink-0">
                                                             <FileText size={22} className="text-primary-500" />
@@ -719,6 +796,7 @@ export default function AnggaranPage() {
                                                         </div>
 
                                                         {/* Action Buttons */}
+                                                        {!isOrderingDocuments && (
                                                         <div className="flex items-center gap-2 shrink-0">
                                                             {(doc.mime_type.startsWith('image/') || doc.mime_type === 'application/pdf') && (
                                                                 <a
@@ -759,6 +837,7 @@ export default function AnggaranPage() {
                                                                 </button>
                                                             )}
                                                         </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             ))
@@ -769,12 +848,35 @@ export default function AnggaranPage() {
 
                             {/* Footer - Fixed */}
                             <div className="flex items-center justify-end gap-3 px-8 py-4 border-t border-slate-100 shrink-0">
-                                <button
-                                    onClick={() => setUploadTarget(null)}
-                                    className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                                >
-                                    Tutup
-                                </button>
+                                {isOrderingDocuments ? (
+                                    <>
+                                        <button
+                                            onClick={() => {
+                                                setDocumentOrderDraft(uploadDocuments)
+                                                setIsOrderingDocuments(false)
+                                            }}
+                                            disabled={reorderDokumenMutation.isPending}
+                                            className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-60"
+                                        >
+                                            Batal
+                                        </button>
+                                        <button
+                                            onClick={handleSaveDocumentOrder}
+                                            disabled={reorderDokumenMutation.isPending}
+                                            className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors disabled:opacity-60"
+                                        >
+                                            {reorderDokumenMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                                            Simpan Urutan
+                                        </button>
+                                    </>
+                                ) : (
+                                    <button
+                                        onClick={() => setUploadTarget(null)}
+                                        className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                                    >
+                                        Tutup
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>

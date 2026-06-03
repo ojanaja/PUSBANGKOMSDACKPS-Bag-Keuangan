@@ -602,7 +602,88 @@ func (h *Handler) UploadBuktiAnggaran(ctx echo.Context) error {
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to save metadata"})
 	}
 
+	orderTx, err := h.pool.Begin(ctx.Request().Context())
+	if err != nil {
+		slog.Error("Begin document order tx failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to save document order"})
+	}
+	defer func() {
+		_ = orderTx.Rollback(ctx.Request().Context())
+	}()
+
+	_, err = orderTx.Exec(ctx.Request().Context(), `
+		UPDATE anggaran_dokumen_bukti
+		SET sort_order = COALESCE((
+			SELECT MAX(sort_order) + 1
+			FROM anggaran_dokumen_bukti
+			WHERE anggaran_node_id = $2
+			AND deleted_at IS NULL
+			AND id <> $1
+		), 0)
+		WHERE id = $1
+	`, docID, uuidToPgUUID(nodeUUID))
+	if err != nil {
+		slog.Error("Set anggaran document sort order failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to save document order"})
+	}
+	if err := orderTx.Commit(ctx.Request().Context()); err != nil {
+		slog.Error("Commit document order tx failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to save document order"})
+	}
+
 	return ctx.JSON(http.StatusOK, map[string]string{"message": "Document uploaded successfully"})
+}
+
+type reorderAnggaranDokumenRequest struct {
+	DocumentIDs []string `json:"document_ids"`
+}
+
+func (h *Handler) ReorderAnggaranDokumen(ctx echo.Context) error {
+	var req reorderAnggaranDokumenRequest
+	if err := ctx.Bind(&req); err != nil {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "invalid request body"})
+	}
+	if len(req.DocumentIDs) == 0 {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "document_ids is required"})
+	}
+
+	reqCtx := ctx.Request().Context()
+	tx, err := h.pool.Begin(reqCtx)
+	if err != nil {
+		slog.Error("Begin reorder anggaran documents tx failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to save document order"})
+	}
+	defer func() {
+		_ = tx.Rollback(reqCtx)
+	}()
+
+	for index, documentID := range req.DocumentIDs {
+		parsedID, err := uuid.Parse(documentID)
+		if err != nil {
+			return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "invalid document id"})
+		}
+
+		tag, err := tx.Exec(reqCtx, `
+			UPDATE anggaran_dokumen_bukti
+			SET sort_order = $1
+			WHERE id = $2
+			AND deleted_at IS NULL
+		`, index, uuidToPgUUID(parsedID))
+		if err != nil {
+			slog.Error("Update anggaran document sort order failed", "error", err)
+			return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to save document order"})
+		}
+		if tag.RowsAffected() == 0 {
+			return ctx.JSON(http.StatusNotFound, map[string]string{"message": "document not found"})
+		}
+	}
+
+	if err := tx.Commit(reqCtx); err != nil {
+		slog.Error("Commit reorder anggaran documents failed", "error", err)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to save document order"})
+	}
+
+	return ctx.JSON(http.StatusOK, map[string]string{"message": "document order saved successfully"})
 }
 
 func (h *Handler) GetAnggaranDokumenByNode(ctx echo.Context, id types.UUID) error {
@@ -669,10 +750,11 @@ func (h *Handler) GetAnggaranDokumenByNode(ctx echo.Context, id types.UUID) erro
 			FROM owner_path
 			GROUP BY document_id
 		)
-		SELECT DISTINCT ON (d.id)
+		SELECT
 			d.id, d.anggaran_node_id, d.file_hash_sha256, d.original_name,
 			d.mime_type, d.file_size_bytes, d.uploaded_by, d.created_at,
-			COALESCE(NULLIF(u.full_name, ''), u.username, 'User Non-Aktif') as uploaded_by_name
+			COALESCE(NULLIF(u.full_name, ''), u.username, 'User Non-Aktif') as uploaded_by_name,
+			d.sort_order
 		FROM anggaran_dokumen_bukti d
 		JOIN anggaran_node owner_node ON owner_node.id = d.anggaran_node_id
 		JOIN owner_signature os ON os.document_id = d.id
@@ -691,7 +773,7 @@ func (h *Handler) GetAnggaranDokumenByNode(ctx echo.Context, id types.UUID) erro
 				AND os.path_signature = ts.path_signature
 			)
 		)
-		ORDER BY d.id, d.created_at DESC
+		ORDER BY d.sort_order ASC, d.created_at ASC, d.original_name ASC
 	`, nodeID)
 	if err != nil {
 		slog.Error("GetAnggaranDokumenByNode failed", "error", err)
@@ -710,8 +792,9 @@ func (h *Handler) GetAnggaranDokumenByNode(ctx echo.Context, id types.UUID) erro
 		var uploadedBy pgtype.UUID
 		var createdAt pgtype.Timestamptz
 		var uploadedByName string
+		var sortOrder int32
 
-		if err := rows.Scan(&docID, &anggaranNodeID, &fileHash, &originalName, &mimeType, &fileSize, &uploadedBy, &createdAt, &uploadedByName); err != nil {
+		if err := rows.Scan(&docID, &anggaranNodeID, &fileHash, &originalName, &mimeType, &fileSize, &uploadedBy, &createdAt, &uploadedByName, &sortOrder); err != nil {
 			slog.Error("Scan anggaran documents failed", "error", err)
 			return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": "failed to read documents"})
 		}
@@ -726,6 +809,7 @@ func (h *Handler) GetAnggaranDokumenByNode(ctx echo.Context, id types.UUID) erro
 			"created_at":       createdAt.Time,
 			"uploaded_by":      uuid.UUID(uploadedBy.Bytes).String(),
 			"uploaded_by_name": uploadedByName,
+			"sort_order":       sortOrder,
 		})
 	}
 

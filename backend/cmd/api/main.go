@@ -197,6 +197,7 @@ func main() {
 	apiGroup.GET("/anggaran/dipa/documents", wrapper.GetDipaDocuments)
 	apiGroup.DELETE("/anggaran/dipa/documents/:id", wrapper.DeleteDipaDokumen)
 	apiGroup.GET("/anggaran/:id/documents", wrapper.GetAnggaranDokumenByNode)
+	apiGroup.POST("/anggaran/:id/documents/reorder", serverHandler.ReorderAnggaranDokumen, authmw.RequirePermission("dokumen:update"))
 	apiGroup.GET("/documents/:id", wrapper.DownloadDocument)
 	apiGroup.PUT("/documents/:id", wrapper.UpdateDocumentName, authmw.RequirePermission("dokumen:update"))
 	apiGroup.DELETE("/documents/:id", wrapper.DeleteDocument, authmw.RequirePermission("dokumen:delete"))
