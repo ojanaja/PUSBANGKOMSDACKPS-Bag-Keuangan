@@ -17,12 +17,10 @@ RUN if [ -f go.mod ]; then go mod download && go mod verify; fi
 # Copy backend source
 COPY backend/ .
 
-# Install tools required for code generation (sqlc, oapi-codegen)
-RUN go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.27.0 && \
-    go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.5.1
+# Install tools required for code generation (oapi-codegen)
+RUN go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.5.1
 
-# Generate DB models and API stubs
-RUN if [ -f sqlc.yaml ]; then sqlc generate; fi
+# Generate API stubs. DB models are generated locally and committed.
 RUN oapi-codegen -package handlers -generate types,server,spec openapi.yaml > internal/api/handlers/api.gen.go
 
 # Build the application
